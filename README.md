@@ -329,7 +329,3 @@ cadence/
 3. **Theoretical guarantees for surrogate-based counterfactual scoring**: bounding the approximation error between the learned surrogate and true interventional effects.
 4. **LLM-specific drift attribution**: adapting CDAG to attribute behavioral drift in large language models (e.g., prompt-distribution shift, tool-use failure attribution) rather than classical tabular/vision models.
 5. **Self-improving causal graphs**: meta-learning the causal discovery algorithm itself from accumulated incident histories across many deployed models, forming a continually improving "causal prior library" for MLOps.
-
----
-
-*Fits naturally alongside your MOSAIC (systems/fairness) and vramfit (scheduling) work — this project extends into causal ML + continual learning while staying in the systems-for-ML lane you've been building a track record in.*
