@@ -1,4 +1,4 @@
-# CADENCE: Causal Attribution-Driven Efficient Continual Retraining for Production ML Systems
+# CADENCE: Causal Attribution-Driven Efficient Continual Retraining For Production ML Systems
 
 ---
 
