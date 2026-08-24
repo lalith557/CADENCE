@@ -81,7 +81,7 @@ Do these roughly in this order — later tasks depend on earlier ones being done
 ### Step 1 — Setup
 - [ ] 1.1 Set up repo, environment, dependencies — Date completed: __________
 - [ ] 1.2 Decide production model architecture (MLP recommended for v1) — Date completed: __________
-- [ ] 1.3 Download Credit Card Fraud Detection dataset — Date completed: __________
+- [x] 1.3 Download Credit Card Fraud Detection dataset — Date completed: 2026-08-24
 - [ ] 1.4 Install `river` and confirm synthetic drift generators work — Date completed: __________
 
 ### Step 2 — Baseline production model
