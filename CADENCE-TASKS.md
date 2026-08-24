@@ -18,7 +18,7 @@ Keep both updated together — ticking a task in one place doesn't auto-update t
 ## SECTION A — Tasks by Priority
 
 ### P0 — Critical foundation (nothing else works without these)
-- [ ] Decide production model architecture for the first build (recommended: MLP, per earlier discussion) — Date completed: __________
+- [x] Decide production model architecture for the first build (recommended: MLP, per earlier discussion) — Date completed: __________
 - [ ] Set up project repo structure, virtual environment, and dependency list (PyTorch, PyTorch Geometric, causal-learn, Stable-Baselines3, etc.) — Date completed: __________
 - [ ] Download and verify Credit Card Fraud Detection dataset (neural adapter) — Date completed: __________
 - [ ] Install and test `river` for synthetic drift generation (SEA/STAGGER/Hyperplane) — Date completed: __________
