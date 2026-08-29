@@ -234,3 +234,31 @@ Format per entry:
   - 800 training timesteps is short; convergence to a suboptimal local optimum is likely.
   - Sandbox retrain-cost approximation (D-16 fast sandbox) may be biased toward small-window retrains, which happen to be nearly free — so PPO systematically underestimates the true cost of frequent retrains.
 
+---
+
+### R-Gate1: GPU acceptance — cuda proven, RTX 4070 detected, carbon profile corrected   (2026-08-29)
+- **Hypothesis / question:** Does the Execution Plan §1 GPU work satisfy Gate 1 — cadence gpu-check green, non-zero CUDA memory logged during training, and carbon/model.py no longer using the wrong `gtx-1650` device profile that fed the RSO reward?
+- **Setup:**
+  - Machine: Windows 11, RTX 4070 Laptop (8 GB VRAM, CC 8.9), torch `2.11.0+cu128`, Python 3.13.12.
+  - Added `cadence/common/device.py` (`get_device`, `assert_on_gpu`, `cuda_memory_snapshot`, `empty_cache`); routed FraudNet through it and instrumented `fit` to log peak VRAM at end of every training run.
+  - Fixed `cadence.carbon.model.HardwareProfile` default to RTX 4070 Laptop (`tflops_fp32=15.62`, `tdp_watts=115`, `baseline_watts=25`) — the old `gtx-1650` default made the closed-form cost estimate 5× too pessimistic on TFLOPs, biasing every R-2/R-3/R-4 cost number.
+  - Kept the old profile as `GTX_1650_PROFILE` and added `detect_hardware_profile()` so the reference-machine sandbox is still reproducible.
+  - `MLFLOW_ALLOW_FILE_STORE=true` is now set inside `cadence.common.tracking` because mlflow 3.15 blocks file-store URIs by default.
+- **Command to reproduce:**
+  ```bash
+  python -m cadence.cli gpu-check
+  python -m cadence.cli smoke
+  python -m benchmarks.phase1_run --config configs/default.yaml --seeds 2 --n-windows 5
+  python -m pytest tests/ -q
+  ```
+- **Result:**
+  - `cadence gpu-check`: torch 2.11.0+cu128, cuda 12.8, `NVIDIA GeForce RTX 4070 Laptop GPU`, 7.996 GB total / 6.889 GB free. Ran 1103 iterations of a 4096×4096 matmul in 11.6 s → **13.05 measured TFLOPs**, **264 MB peak VRAM**. Exit 0.
+  - `cadence smoke`: MLflow file-store run created after opting in via `MLFLOW_ALLOW_FILE_STORE=true`. Seeds logged with `cuda_available=True`.
+  - `phase1_run`: FraudNet training + baseline strategies all execute with `device=cuda`. Each `fit()` logs `fit_gpu_memory allocated_mb=65.1 max_allocated_mb=163.6 reserved_mb=242.0`. Peak VRAM > 0 satisfies §1b.4.
+  - `pytest`: **28 passed** in 16.5 s. No regressions from the device/carbon changes.
+- **Statistical test:** N/A (setup gate).
+- **Interpretation:** Gate 1 met — CUDA is genuinely in use, VRAM bytes are moving onto the card, the carbon reward now uses the machine that will actually run the training, and mlflow is unblocked on 3.x. Any R-run written on top of this gate is now safe to cite in the paper's cost/carbon columns; earlier R-runs written under the `gtx-1650` profile are still valid *as-they-were* but should be regenerated before publication with the corrected profile. The GNN/surrogate portion of Gate 1 (FraudNet+GNN smoke run) still requires Step B to land — that is the next gate, not this one.
+- **Threats to validity:**
+  - FraudNet is a tiny MLP (4k params); 163 MB peak VRAM is dominated by the DataLoader worker's staging tensors, not the model. This does NOT yet prove the GPU carries a real workload — Steps B/C (GNN + surrogate on GPU) are where that becomes non-trivial.
+  - `MLFLOW_ALLOW_FILE_STORE=true` is a workaround, not a migration. Long-term the plan should move MLflow to sqlite (`sqlite:///experiments/mlflow.db`) so tracking survives an mlflow major-version bump.
+  - RTX 4070 Laptop's TFLOPs figure is the boost-clock spec, not measured — the 13.05 TFLOPs the matmul actually delivers is 84 % of nameplate, so the closed-form cost model will slightly *under*-estimate GPU-seconds. Acceptable for the paper's order-of-magnitude claims; not acceptable for a per-cent claim.

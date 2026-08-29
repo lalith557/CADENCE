@@ -7,14 +7,20 @@ from just their run_id.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-import mlflow
+# mlflow >=3 refuses filesystem tracking backends by default. Our default
+# tracking URI is `file:./experiments/mlruns` (per configs/*.yaml) — keep
+# that lightweight local-file workflow by opting in before mlflow is imported.
+os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
 
-from cadence.common.config import Config
+import mlflow  # noqa: E402  (needs the env var set first)
+
+from cadence.common.config import Config  # noqa: E402
 
 
 def _git_sha() -> str:

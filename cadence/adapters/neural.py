@@ -19,6 +19,13 @@ from sklearn.metrics import f1_score, roc_auc_score
 from torch.utils.data import DataLoader, TensorDataset
 
 from cadence.adapters.base import FitResult, ModelAdapter, TrainMetrics
+from cadence.common.device import (
+    assert_on_gpu,
+    cuda_memory_snapshot,
+    get_device,
+    log_device_info,
+    reset_peak_memory,
+)
 from cadence.common.logging import get_logger
 
 log = get_logger("cadence.adapters.neural")
@@ -93,9 +100,12 @@ class FraudNet(ModelAdapter):
 
     @staticmethod
     def _resolve_device(spec: str) -> torch.device:
+        # "auto" defers to the shared get_device() so every tensor in the
+        # project resolves through the same helper. Explicit specs still work
+        # for tests that need to pin a device.
         if spec == "auto":
-            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        return torch.device(spec)
+            return get_device()
+        return get_device(override=spec)
 
     # ---- ModelAdapter API ----
 
@@ -127,6 +137,12 @@ class FraudNet(ModelAdapter):
         best_state: dict[str, Any] | None = None
         patience_ctr = 0
         history: list[TrainMetrics] = []
+
+        # GPU guard + peak-VRAM tracking per Execution Plan §1b.4/§5.
+        if self.device.type == "cuda":
+            reset_peak_memory()
+            log_device_info(self.device)
+            assert_on_gpu(self._module, name="FraudNet")
 
         wall_start = time.perf_counter()
         gpu_time = 0.0
@@ -192,6 +208,15 @@ class FraudNet(ModelAdapter):
         self.decision_threshold = self._tune_threshold(tune_X, tune_y)
         # Recompute best_val_f1 with the tuned threshold.
         best_val_f1 = self._score_f1(tune_X, tune_y)
+
+        if self.device.type == "cuda":
+            snap = cuda_memory_snapshot()
+            log.info(
+                "fit_gpu_memory",
+                allocated_mb=round(snap["allocated"] / 1024**2, 3),
+                max_allocated_mb=round(snap["max_allocated"] / 1024**2, 3),
+                reserved_mb=round(snap["reserved"] / 1024**2, 3),
+            )
 
         return FitResult(
             epochs_run=history[-1].epoch,
