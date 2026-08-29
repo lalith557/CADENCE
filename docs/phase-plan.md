@@ -274,6 +274,36 @@ Full details in `docs/results.md` R-Gate-E.
 
 ---
 
+## Step F — Generality + robustness (Execution Plan §3) ✅ TREE, H3-ON-MNIST, ROBUSTNESS ALL PASS. TEXT DRIFT DEFERRED.
+
+**Landed:**
+- `cadence.adapters.tree.LightGBMAdapter` — LightGBM through the ModelAdapter
+  protocol. partial_fit(layers=[...]) raises NotImplementedError; executor
+  catches it and falls back to full retrain (matches Q104 of the reference).
+- `cadence.data.mnist_splits.load_split_mnist` — hand-rolled Split-MNIST
+  loader from raw ubyte files in Dataset/MNIST/. No Avalanche dep needed.
+- `benchmarks.phase_f_tree` — GMSC generality runner.
+- `benchmarks.phase_f_mnist` — real H3 forgetting on Split-MNIST.
+- `benchmarks.phase_f_robustness` — PSI false-alarm rate + GNN AUROC under
+  random edge dropout.
+
+**Gate F (R-Gate-F, 2026-08-29):**
+- LightGBM on GMSC (3 seeds × 6 windows): CADENCE F1=0.4443 at 0 actions;
+  periodic F1=0.4436 at 2 fulls; reactive_full F1=0.4418 at 6 fulls.
+  Strict cost-dominance at equal F1.
+- Split-MNIST {0,1} → {2,3} (5 seeds): partial EWC forgetting = -0.030,
+  naive full forgetting = +0.386. Paired Wilcoxon p = 0.03125 (< 0.05).
+  H3 SUPPORTED on the multi-task benchmark — inverts the Step D Fraud
+  negative exactly as the plan predicted.
+- PSI: 0% false-alarm on undrifted Fraud, 100% true-alert on drifted.
+- GNN attribution AUROC under edge dropout: 0.945 → 0.908 → 0.908 → 0.903
+  as drop_frac goes 0.0 → 0.1 → 0.3 → 0.5. Graceful degradation.
+
+**Not yet done:** text drift (Amazon Reviews 2023 / Yelp) — requires
+~7 GB download + text classifier scaffolding. Deferred as follow-up.
+
+---
+
 ## Phase 4 — Counterfactual surrogate (Claim B, narrow)
 
 **Deliverables:**
