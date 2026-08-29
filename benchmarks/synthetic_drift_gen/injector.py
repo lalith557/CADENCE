@@ -57,7 +57,32 @@ class ConceptShiftSpec:
         return "concept_shift"
 
 
-DriftSpec = FeatureShiftSpec | ConceptShiftSpec
+@dataclass
+class MultiFeatureShiftSpec:
+    """Shift several features simultaneously.
+
+    Used for the "needs-full-retrain" contested scenario in Step A: a single-
+    layer partial retrain can nudge one feature's activation cluster back but
+    can't fix a drift that touches multiple orthogonal feature dimensions at
+    once — that's exactly what a full retrain is for.
+
+    Ground truth: `feature_idx` names the *primary* root cause (the strongest
+    single contributor). Attribution scorers should still hit this one, but the
+    presence of others is the reason partial won't be enough.
+    """
+
+    feature_idx: int
+    other_indices: list[int] = field(default_factory=list)
+    multiplicative: float = 1.0
+    additive: float = 0.0
+    other_multiplicative: float = 1.0
+    other_additive: float = 0.0
+
+    def kind(self) -> Literal["covariate_shift"]:
+        return "covariate_shift"
+
+
+DriftSpec = FeatureShiftSpec | ConceptShiftSpec | MultiFeatureShiftSpec
 
 
 @dataclass
@@ -147,6 +172,18 @@ class DriftInjector:
             flips = (self.rng.random(n) < flip_prob) & crosses & active
             y[flips] = 1 - y[flips]
             self._magnitude_total += float(np.mean(flip_prob[active]) if active.any() else 0.0)
+        elif isinstance(spec, MultiFeatureShiftSpec):
+            f = spec.feature_idx
+            X[active, f] = ((spec.multiplicative - 1.0) * intensity[active] + 1.0) * X[
+                active, f
+            ] + spec.additive * intensity[active]
+            for other in spec.other_indices:
+                X[active, other] = ((spec.other_multiplicative - 1.0) * intensity[active] + 1.0) * X[
+                    active, other
+                ] + spec.other_additive * intensity[active]
+            self._magnitude_total += float(
+                np.mean(np.abs(intensity[active])) if active.any() else 0.0
+            ) * (1 + len(spec.other_indices))
         else:  # pragma: no cover
             raise TypeError(f"unknown drift spec: {type(spec)!r}")
 
@@ -160,6 +197,11 @@ class DriftInjector:
         if isinstance(spec, FeatureShiftSpec):
             magnitude = abs(spec.multiplicative - 1.0) + abs(spec.additive)
             mechanism: Literal["covariate_shift", "concept_shift"] = "covariate_shift"
+        elif isinstance(spec, MultiFeatureShiftSpec):
+            magnitude = abs(spec.multiplicative - 1.0) + abs(spec.additive) + len(
+                spec.other_indices
+            ) * (abs(spec.other_multiplicative - 1.0) + abs(spec.other_additive))
+            mechanism = "covariate_shift"
         else:
             magnitude = spec.flip_probability
             mechanism = "concept_shift"
@@ -239,3 +281,91 @@ def build_default_scenarios(feature_names: list[str]) -> list[DriftScenario]:
             feature_names=feature_names,
         ),
     ]
+
+
+def build_contested_sla_scenarios(feature_names: list[str]) -> list[DriftScenario]:
+    """The Step A scenarios: post-drift F1 sits *just* below SLA (0.90) so
+    "do nothing" is provably wrong on every seed.
+
+    Three scenarios, chosen so each of {partial, full, no-op} is the correct
+    action somewhere:
+
+      (a) `contested_amount_mild_partial_recoverable`
+          A modest multiplicative shift on `Amount` (a shallow feature that
+          Layer-1's cluster handles). Partial retrain of Layer 1 recovers
+          fully → **partial is the correct action**.
+
+      (b) `contested_multi_feature_full_needed`
+          Two-feature simultaneous shift on `Amount` + `V14`. A Layer-1-only
+          partial nudges the shallow signal back but leaves the deeper
+          representation broken; only a full retrain restores F1 → **full is
+          the correct action**.
+
+      (c) `contested_v14_hard_flip_unrecoverable`
+          Concept-flip on V14 above threshold, high flip probability. The old
+          concept is genuinely gone; neither partial nor full recovers F1
+          without new labels. Burning compute on retrains is wrong → **no-op
+          is the correct action (escalate a human instead)**.
+
+    Every scenario is deliberately calibrated so post-drift F1 lands in
+    roughly [SLA - 0.10, SLA - 0.02]; the naïve "no-op-forever" policy that
+    won Phase 2's bang-bang search cannot win these scenarios.
+    """
+    n = len(feature_names)
+    amount_idx = feature_names.index("Amount") if "Amount" in feature_names else min(29, n - 1)
+    v14_idx = feature_names.index("V14") if "V14" in feature_names else min(14, n - 1)
+
+    return [
+        DriftScenario(
+            name="contested_v14_partial_recoverable",
+            # V14 is a strong PCA feature FraudNet actually uses. A moderate
+            # additive shift on V14 knocks F1 below the SLA=0.90 × baseline
+            # floor but a Layer-1 partial retrain of the L1 cluster tied to
+            # V14 can recover most of it. Correct action: partial.
+            spec=FeatureShiftSpec(feature_idx=v14_idx, multiplicative=1.0, additive=1.0),
+            schedule=DriftSchedule.ABRUPT,
+            start_step=0,
+            full_effect_step=0,
+            feature_names=feature_names,
+        ),
+        DriftScenario(
+            name="contested_multi_feature_full_needed",
+            # Two-feature shift: Layer-1-only partial can't recover, full does.
+            spec=MultiFeatureShiftSpec(
+                feature_idx=amount_idx,
+                other_indices=[v14_idx],
+                multiplicative=1.20,
+                additive=0.0,
+                other_multiplicative=0.5,
+                other_additive=-0.75,
+            ),
+            schedule=DriftSchedule.ABRUPT,
+            start_step=0,
+            full_effect_step=0,
+            feature_names=feature_names,
+        ),
+        DriftScenario(
+            name="contested_v14_tail_flip_unrecoverable",
+            # Flip labels only where V14 is in the moderate tail (>= 1.0).
+            # A meaningful fraction of positives get relabeled, but the
+            # feature-space distribution itself is unchanged, so no amount of
+            # partial/full retraining on old-labels-plus-new-window data
+            # recovers the SLA. Correct action: no-op + escalate a human.
+            spec=ConceptShiftSpec(feature_idx=v14_idx, threshold=1.0, flip_probability=0.5),
+            schedule=DriftSchedule.ABRUPT,
+            start_step=0,
+            full_effect_step=0,
+            feature_names=feature_names,
+        ),
+    ]
+
+
+def build_step_a_scenarios(feature_names: list[str]) -> list[DriftScenario]:
+    """Union set used by Step A / Gate A — includes both the existing scenarios
+    (so we don't lose any previous R-4 comparability) and the contested three
+    where "do nothing" is unambiguously wrong. ≥5 scenarios in total, matching
+    the Gate A protocol.
+    """
+    base = build_default_scenarios(feature_names)
+    contested = build_contested_sla_scenarios(feature_names)
+    return base + contested
