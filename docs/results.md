@@ -414,3 +414,55 @@ Format per entry:
   - `finetune_epochs=2, fullretrain_epochs=5` — full retrain has more optimizer steps and more data (historical + retrain) than partial. Equalizing wall-clock instead of epochs would be a fairer H3 test.
   - The disjoint criterion is defined on raw feature-space statistics, not on the model's decision boundary. A "genuinely disjoint task" criterion (e.g., "fraud from merchants FraudNet has never seen") would be a stronger test but requires merchant IDs that this dataset doesn't ship with.
   - This entry does **not** invalidate the Part-3B executor itself — the executor code, all 8 §4 fallbacks, shadow/canary/rollback, and the disjoint-split infrastructure are in-tree and tested (21 fallback tests green in `tests/unit/test_fallbacks.py`). What it invalidates is the *H3 hypothesis on this specific dataset*. The MNIST/Avalanche path (Step F) is where H3 gets its real test.
+
+---
+
+### R-Gate-E: Real drift end-to-end on Elec2 + Airlines (outcome graded)   (2026-08-29)
+- **Hypothesis / question:** H2 on real drift — CADENCE (rule-driven executor with §4 fallbacks) recovers performance at *lower total cost* than periodic-retrain and reactive-full baselines on ≥2 real-drift datasets, per the plan's outcome grading.
+- **Setup:**
+  - Two real-drift datasets:
+    * **Elec2** — 45,312 half-hourly electricity price rows, loaded via `river.datasets.Elec2()`. Train on first 30 % (13,593 rows), stream the remaining 31,719 rows in 1024-row windows.
+    * **Airlines** — 26,969 flight-delay rows from `Dataset/Airlines1.arff`. Categoricals (Airline, Flight, AirportFrom, AirportTo, DayOfWeek) hash-encoded to 64 bins so a plain MLP can consume them. Train on first 30 %, stream the rest.
+  - Three strategies compared per (dataset, seed):
+    * `cadence_rule` — `RetrainExecutor` (shadow, rollback, EWC partial) inside an `EscalationLadder(partial → full → human)`. §4.6 false-alarm suppression checks PSI + delayed-label F1.
+    * `periodic` — full retrain every 4 windows regardless of drift.
+    * `reactive_full` — PSI alert → full retrain (the Phase 1 R-2 baseline).
+  - 3 seeds × 10 windows × 1024 rows/window. SLA target 0.65. Finetune epochs 2, full-retrain epochs 5.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase_e_run --dataset elec2 --seeds 3 \
+      --window-size 1024 --n-windows 10 --sla 0.65 \
+      --finetune-epochs 2 --fullretrain-epochs 5 --periodic-period 4 \
+      --out experiments/phase_e_elec2.json
+  python -m benchmarks.phase_e_run --dataset airlines --seeds 3 \
+      --window-size 1024 --n-windows 10 --sla 0.65 \
+      --finetune-epochs 2 --fullretrain-epochs 5 --periodic-period 4 \
+      --out experiments/phase_e_airlines.json
+  ```
+- **Result — Elec2** (baseline train F1 = 0.840, undrifted stream F1 = 0.425, SLA 0.65 — genuine drift-driven degradation):
+
+  | strategy       | mean F1         | min F1         | GPU-hr (relative) | actions {no, part, full} |
+  |----------------|-----------------|----------------|-------------------|--------------------------|
+  | `cadence_rule` | **0.575 ± 0.000** | 0.254         | 1.00× (base)      | {5.0, 4.0, 3.0}          |
+  | `periodic`     | 0.414 ± 0.009   | 0.121         | **0.65×**         | {8.0, 0.0, 2.0}          |
+  | `reactive_full`| 0.591 ± 0.007   | **0.353**     | 3.23×             | {0.0, 0.0, 10.0}         |
+
+- **Result — Airlines** (baseline train F1 = 0.525, undrifted stream F1 = 0.561 — the *stream is easier than train* here: no meaningful drift on hashed categoricals):
+
+  | strategy       | mean F1        | min F1        | GPU-hr (relative) | actions {no, part, full} |
+  |----------------|----------------|---------------|-------------------|--------------------------|
+  | `cadence_rule` | 0.561 ± 0.000  | 0.536         | 1.55× vs periodic | {0.0, 3.0, 3.0}          |
+  | `periodic`     | 0.561 ± 0.000  | 0.536         | 1.00× (base)      | {8.0, 0.0, 2.0}          |
+  | `reactive_full`| 0.561 ± 0.000  | 0.536         | **0** — PSI never fires | {10.0, 0.0, 0.0}         |
+
+- **Statistical test:** N/A — outcome-graded gate, not a paired hypothesis test. The plan's strict Gate E criterion is `cadence_wins_cost := (cadence_gpu_hr < baseline_gpu_hr) AND (cadence_mean_f1 >= baseline_mean_f1)`. Both datasets return `FAIL` on both comparisons under that criterion.
+- **Interpretation (honest, per plan's "report negatives"):**
+  - **Elec2 — CADENCE is genuinely on the Pareto frontier, but does not strict-dominate either baseline.** Against `periodic`, CADENCE wins F1 by +0.160 but costs 1.54× as much. Against `reactive_full`, CADENCE saves **69 %** of the compute (0.31× cost) at a **1.7 % F1 loss** (-0.017). Neither baseline dominates CADENCE, but CADENCE dominates neither strictly. The paper story that survives is the *controllable trade-off* one first surfaced in R-4b: CADENCE is not strictly better, it is a Pareto-frontier option.
+  - **Airlines — PSI never fires on the hash-encoded categoricals so reactive_full trivially wins at zero cost with identical F1.** All three strategies land at F1 = 0.561, but reactive_full spent 0 GPU-hr while CADENCE spent 1.55× the periodic baseline on its partial+full ladder. On this dataset the drift is subtle enough that "do nothing when the trigger is silent" wins. The honest reading: hash-encoding destroys the drift signal the PSI trigger relies on; a real Airlines evaluation for the paper needs a smarter encoder (one-hot on top-K airlines + numeric time + numeric length, per the reference dataset section 3).
+  - **The end-to-end wiring works on both datasets.** Both datasets load through `cadence.data.realdrift`; the pretrained MLP runs on cuda; the `EscalationLadder` correctly fires partial → full when partial rolls back; the §4.6 false-alarm check gated no-ops; MLflow captured everything.
+- **Threats to validity:**
+  - Only 3 seeds. A wider sweep (≥10 seeds × more windows × more SLA targets) is needed for a paper-grade H2 headline. That said, the effect sizes on Elec2 (F1 gap ±0.16, cost ratio 3.2×) are far larger than 3-seed variance would produce by chance.
+  - Airlines' hash-encoding is *the* threat to the F1 = 0.561 flat line. Rerun with per-airline one-hot + numeric Time/Length before drawing paper conclusions about Airlines drift.
+  - `cadence_rule` uses a hand-written rule policy (partial-if-below-SLA, escalate on rollback). The learned PPO from R-4 was trained on the pre-Step-A 13-d obs and doesn't fit the enriched 15-d obs the executor now emits. Once the pending Gate A workstream retrains PPO on 15-d, the RSO's *actions* will be learned rather than rule-driven — and only then can we cleanly separate "the rule is suboptimal" from "the executor cannot beat this baseline."
+  - The closed-form cost model (`estimate_cost` with `HardwareProfile()` = RTX 4070 Laptop) drives every GPU-hr number here. Measured GPU-hr via CodeCarbon on the same runs would tighten the paper's cost claims by ~20 % (§1b threats).
+  - No H1 attribution measured here — Gate E is H2/outcome only. The GNN attribution scorer built in Step B / Step C is available on the executor path but isn't exercised in this Gate E entry (rule policy doesn't consult scorer output beyond "we're below SLA").

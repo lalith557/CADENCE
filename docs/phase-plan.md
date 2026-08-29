@@ -247,6 +247,33 @@ results honestly."
 
 ---
 
+## Step E — Real drift end-to-end (Execution Plan §3, outcome H2) ✅ CODE COMPLETE, PARETO ON ELEC2, DEGENERATE ON AIRLINES
+
+**Landed:**
+- `cadence.data.realdrift` — Elec2 loader via `river.datasets.Elec2()` and
+  Airlines loader from `Dataset/Airlines1.arff` with hash-encoded categoricals.
+  Both return `LoadedTemporalDataset` preserving the row order so early ->
+  late slice is genuine temporal drift.
+- `benchmarks.phase_e_run` — three-way comparison on real drift with the
+  `RetrainExecutor + EscalationLadder + FalseAlarmConfig` composed.
+- MLflow captures every stage; artifact JSON lands per dataset.
+
+**Gate E (R-Gate-E, 2026-08-29):**
+- Elec2 (3 seeds, 10 windows): cadence_rule mean F1 = 0.575, reactive_full
+  0.591, periodic 0.414. CADENCE saves **69 % compute vs reactive_full**
+  at a 1.7 % F1 loss (-0.017); wins +0.16 F1 over periodic at 1.54× cost.
+  On the Pareto frontier; does not strict-dominate either baseline.
+- Airlines (3 seeds, 10 windows): all three strategies land at F1 = 0.561
+  because hash-encoded categoricals destroy the PSI signal — PSI never
+  fires, so reactive_full trivially wins at zero cost. Honest: needs a
+  proper categorical encoder for a paper-grade Airlines evaluation.
+
+The plan's strict criterion (lower cost AND ≥ F1) is not met on either
+dataset. Honest reporting per §6: negative-vs-strict, positive-on-Pareto.
+Full details in `docs/results.md` R-Gate-E.
+
+---
+
 ## Phase 4 — Counterfactual surrogate (Claim B, narrow)
 
 **Deliverables:**
