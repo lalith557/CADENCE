@@ -1,0 +1,263 @@
+{
+  "aggregates": {
+    "psi_stub": {
+      "n": 4,
+      "top1_acc": [
+        1.0,
+        0.0
+      ],
+      "top3_acc": [
+        1.0,
+        0.0
+      ],
+      "mean_reciprocal_rank": [
+        1.0,
+        0.0
+      ],
+      "auroc": [
+        1.0,
+        0.0
+      ],
+      "mean_rank": [
+        1.0,
+        0.0
+      ]
+    },
+    "cdag_structural": {
+      "n": 4,
+      "top1_acc": [
+        0.5,
+        0.5
+      ],
+      "top3_acc": [
+        1.0,
+        0.0
+      ],
+      "mean_reciprocal_rank": [
+        0.6666666666666666,
+        0.33333333333333337
+      ],
+      "auroc": [
+        0.9655172413793103,
+        0.03448275862068967
+      ],
+      "mean_rank": [
+        2.0,
+        1.0
+      ]
+    },
+    "gnn_learned": {
+      "n": 4,
+      "top1_acc": [
+        1.0,
+        0.0
+      ],
+      "top3_acc": [
+        1.0,
+        0.0
+      ],
+      "mean_reciprocal_rank": [
+        1.0,
+        0.0
+      ],
+      "auroc": [
+        1.0,
+        0.0
+      ],
+      "mean_rank": [
+        1.0,
+        0.0
+      ]
+    }
+  },
+  "shd_proxy_mean": 1.0,
+  "shd_proxy_std": 0.0,
+  "gnn_train": {
+    "final_val_acc": 0.8333333333333334,
+    "final_val_loss": 0.7452853137583588,
+    "wall_s": 2.074564400012605,
+    "max_vram_mb": 67.744
+  },
+  "rows": [
+    {
+      "scorer": "psi_stub",
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 0,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 0,
+      "gt_idx": 29,
+      "rank": 3,
+      "top1": 0,
+      "top3": 1,
+      "reciprocal_rank": 0.3333333333333333,
+      "auroc": 0.9310344827586207
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 0,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 1,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 1,
+      "gt_idx": 29,
+      "rank": 3,
+      "top1": 0,
+      "top3": 1,
+      "reciprocal_rank": 0.3333333333333333,
+      "auroc": 0.9310344827586207
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 1,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "v14_additive_abrupt",
+      "seed": 0,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "v14_additive_abrupt",
+      "seed": 0,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "v14_additive_abrupt",
+      "seed": 0,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "v14_additive_abrupt",
+      "seed": 1,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "v14_additive_abrupt",
+      "seed": 1,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "v14_additive_abrupt",
+      "seed": 1,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    }
+  ],
+  "shd_rows": [
+    {
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 0,
+      "shd_proxy": 1,
+      "gt_idx": 29
+    },
+    {
+      "scenario": "amount_multiplicative_abrupt",
+      "seed": 1,
+      "shd_proxy": 1,
+      "gt_idx": 29
+    },
+    {
+      "scenario": "v14_additive_abrupt",
+      "seed": 0,
+      "shd_proxy": 1,
+      "gt_idx": 14
+    },
+    {
+      "scenario": "v14_additive_abrupt",
+      "seed": 1,
+      "shd_proxy": 1,
+      "gt_idx": 14
+    }
+  ],
+  "wilcoxon": {
+    "gnn_learned_gt_psi_stub_reciprocal_rank": {
+      "stat": 0.0,
+      "p": 1.0,
+      "n_pairs": 4
+    },
+    "gnn_learned_gt_psi_stub_auroc": {
+      "stat": 0.0,
+      "p": 1.0,
+      "n_pairs": 4
+    },
+    "gnn_learned_gt_cdag_structural_reciprocal_rank": {
+      "stat": 3.0,
+      "p": 0.25,
+      "n_pairs": 4
+    },
+    "gnn_learned_gt_cdag_structural_auroc": {
+      "stat": 3.0,
+      "p": 0.25,
+      "n_pairs": 4
+    }
+  }
+}

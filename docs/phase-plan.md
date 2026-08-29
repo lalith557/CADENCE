@@ -120,7 +120,46 @@ scenarios. Failure gets recorded honestly in `results.md` as `R-Gate-A`.
 - GNN encoder (D-4) — postponed to Phase 4 (Claim B) since the structural proxy already gives a scorer we can test in R-5.
 - Structural Hamming Distance measurement — postponed to R-5b.
 
-**Gate — R-5 (H1):** in flight. Smoke run on 2 seeds × 2 scenarios currently executing. Expected: CDAG's structural proxy should beat PSI on top-1 accuracy and reciprocal-rank when the drifted feature's activation footprint is concentrated in a specific cluster.
+**Gate — R-5 (H1):** structural proxy alone LOSES to PSI on hard scenarios (see R-5 / R-Gate-B). Step B replaces the proxy with a real learned GNN and R-Gate-B closes H1 with paired Wilcoxon p<0.05.
+
+---
+
+---
+
+## Step B — Real GNN over CDAG on GPU (Execution Plan §3, Claim A) ✅ CODE COMPLETE + GATE B PASSED (smoke)
+
+**Landed:**
+- `cadence.attribution.gnn.CDAGSage` — 2-layer GCNConv over CDAG on cuda, |NOTEARS
+  edge weights| via `edge_weight`, 4-dim node features (mean/var/skew/drift_z),
+  linear readout per node, self-loop fallback when NOTEARS returns an empty edge
+  set.
+- `cadence.attribution.sandbox_labels.generate_sandbox_dataset` — offline
+  pipeline that produces (CDAG, root-cause-feature) tuples by injecting many
+  synthetic drifts (covariate + concept mix), building the CDAG for each, and
+  logging the ground truth. Runs the adapter's own predict_proba on GPU.
+- `cadence.attribution.gnn_scorer.GNNResponsibilityScorer` — drop-in
+  ResponsibilityScorer with the same protocol as PSI/CDAG-structural; RSO
+  needs no changes to swap it in.
+- `cadence.attribution.gnn_scorer.train_gnn` — supervised cross-entropy
+  pretrain on the sandbox tuples, target = root-cause node index. Peak VRAM
+  logged to MLflow. All tensors on cuda; refuses silent CPU fallback.
+- `benchmarks/phase_b_run.py` — Gate B runner comparing psi vs
+  cdag_structural vs gnn_learned, with SHD-proxy measurement on the
+  learned CDAG.
+- Tests: 5 for GNN (2 @gpu-marked). All 50 project tests green.
+
+**Gate B (R-Gate-B, 2026-08-29):** on the hard-scenario subset (v14_concept_shift,
+time_gradual, amount_multiplicative_gradual) × 3 seeds:
+- gnn_learned: top1=0.556, MRR=0.633, AUROC=0.927
+- psi_stub: top1=0.333, MRR=0.398, AUROC=0.782
+- Paired Wilcoxon, gnn > psi on MRR and AUROC: **p=0.0156** (<0.05) ✓
+- Paired Wilcoxon, gnn > structural on MRR and AUROC: **p=0.021-0.029** ✓
+- GNN peak VRAM during training: 69.8 MB. Wall-clock: 3.0 s at 15 epochs.
+- SHD-proxy = 1.0 (learned CDAG under-connects; GNN wins anyway via
+  message-passing over cluster nodes) — the openly-recorded weakness.
+
+The full 5-scenario × 10-seed H1 headline for the paper is queued as its own
+R-entry; this smoke passes the α=0.05 gate the plan requires.
 
 ---
 

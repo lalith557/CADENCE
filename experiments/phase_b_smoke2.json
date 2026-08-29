@@ -1,0 +1,458 @@
+{
+  "aggregates": {
+    "psi_stub": {
+      "n": 9,
+      "top1_acc": [
+        0.3333333333333333,
+        0.4714045207910317
+      ],
+      "top3_acc": [
+        0.3333333333333333,
+        0.4714045207910317
+      ],
+      "mean_reciprocal_rank": [
+        0.39814814814814814,
+        0.4257245900952833
+      ],
+      "auroc": [
+        0.7816091954022988,
+        0.1600964169791278
+      ],
+      "mean_rank": [
+        7.333333333333333,
+        4.642796092394707
+      ]
+    },
+    "cdag_structural": {
+      "n": 9,
+      "top1_acc": [
+        0.0,
+        0.0
+      ],
+      "top3_acc": [
+        0.0,
+        0.0
+      ],
+      "mean_reciprocal_rank": [
+        0.15694444444444444,
+        0.08031573497111645
+      ],
+      "auroc": [
+        0.7049808429118775,
+        0.2270579676632805
+      ],
+      "mean_rank": [
+        9.555555555555555,
+        6.584681062235135
+      ]
+    },
+    "gnn_learned": {
+      "n": 9,
+      "top1_acc": [
+        0.5555555555555556,
+        0.49690399499995325
+      ],
+      "top3_acc": [
+        0.5555555555555556,
+        0.49690399499995325
+      ],
+      "mean_reciprocal_rank": [
+        0.6333333333333333,
+        0.41005871304990965
+      ],
+      "auroc": [
+        0.9272030651340997,
+        0.0819959178507
+      ],
+      "mean_rank": [
+        3.111111111111111,
+        2.3778816176702997
+      ]
+    }
+  },
+  "shd_proxy_mean": 1.0,
+  "shd_proxy_std": 0.0,
+  "gnn_train": {
+    "final_val_acc": 0.6666666666666666,
+    "final_val_loss": 1.3275842721257074,
+    "wall_s": 7.062970600003609,
+    "max_vram_mb": 69.796
+  },
+  "rows": [
+    {
+      "scorer": "psi_stub",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 0,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 0,
+      "gt_idx": 29,
+      "rank": 6,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.16666666666666666,
+      "auroc": 0.8275862068965517
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 0,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 1,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 1,
+      "gt_idx": 29,
+      "rank": 6,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.16666666666666666,
+      "auroc": 0.8275862068965517
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 1,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 2,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 2,
+      "gt_idx": 29,
+      "rank": 6,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.16666666666666666,
+      "auroc": 0.8275862068965517
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 2,
+      "gt_idx": 29,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "v14_concept_shift",
+      "seed": 0,
+      "gt_idx": 14,
+      "rank": 9,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.1111111111111111,
+      "auroc": 0.7241379310344828
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "v14_concept_shift",
+      "seed": 0,
+      "gt_idx": 14,
+      "rank": 16,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.0625,
+      "auroc": 0.48275862068965514
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "v14_concept_shift",
+      "seed": 0,
+      "gt_idx": 14,
+      "rank": 5,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.2,
+      "auroc": 0.8620689655172413
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "v14_concept_shift",
+      "seed": 1,
+      "gt_idx": 14,
+      "rank": 9,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.1111111111111111,
+      "auroc": 0.7241379310344828
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "v14_concept_shift",
+      "seed": 1,
+      "gt_idx": 14,
+      "rank": 20,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.05,
+      "auroc": 0.3448275862068966
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "v14_concept_shift",
+      "seed": 1,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "v14_concept_shift",
+      "seed": 2,
+      "gt_idx": 14,
+      "rank": 9,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.1111111111111111,
+      "auroc": 0.7241379310344828
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "v14_concept_shift",
+      "seed": 2,
+      "gt_idx": 14,
+      "rank": 20,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.05,
+      "auroc": 0.3448275862068966
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "v14_concept_shift",
+      "seed": 2,
+      "gt_idx": 14,
+      "rank": 1,
+      "top1": 1,
+      "top3": 1,
+      "reciprocal_rank": 1.0,
+      "auroc": 1.0
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "time_gradual",
+      "seed": 0,
+      "gt_idx": 0,
+      "rank": 12,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.08333333333333333,
+      "auroc": 0.6206896551724138
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "time_gradual",
+      "seed": 0,
+      "gt_idx": 0,
+      "rank": 4,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.25,
+      "auroc": 0.896551724137931
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "time_gradual",
+      "seed": 0,
+      "gt_idx": 0,
+      "rank": 6,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.16666666666666666,
+      "auroc": 0.8275862068965517
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "time_gradual",
+      "seed": 1,
+      "gt_idx": 0,
+      "rank": 12,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.08333333333333333,
+      "auroc": 0.6206896551724138
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "time_gradual",
+      "seed": 1,
+      "gt_idx": 0,
+      "rank": 4,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.25,
+      "auroc": 0.896551724137931
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "time_gradual",
+      "seed": 1,
+      "gt_idx": 0,
+      "rank": 6,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.16666666666666666,
+      "auroc": 0.8275862068965517
+    },
+    {
+      "scorer": "psi_stub",
+      "scenario": "time_gradual",
+      "seed": 2,
+      "gt_idx": 0,
+      "rank": 12,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.08333333333333333,
+      "auroc": 0.6206896551724138
+    },
+    {
+      "scorer": "cdag_structural",
+      "scenario": "time_gradual",
+      "seed": 2,
+      "gt_idx": 0,
+      "rank": 4,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.25,
+      "auroc": 0.896551724137931
+    },
+    {
+      "scorer": "gnn_learned",
+      "scenario": "time_gradual",
+      "seed": 2,
+      "gt_idx": 0,
+      "rank": 6,
+      "top1": 0,
+      "top3": 0,
+      "reciprocal_rank": 0.16666666666666666,
+      "auroc": 0.8275862068965517
+    }
+  ],
+  "shd_rows": [
+    {
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 0,
+      "shd_proxy": 1,
+      "gt_idx": 29
+    },
+    {
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 1,
+      "shd_proxy": 1,
+      "gt_idx": 29
+    },
+    {
+      "scenario": "amount_multiplicative_gradual",
+      "seed": 2,
+      "shd_proxy": 1,
+      "gt_idx": 29
+    },
+    {
+      "scenario": "v14_concept_shift",
+      "seed": 0,
+      "shd_proxy": 1,
+      "gt_idx": 14
+    },
+    {
+      "scenario": "v14_concept_shift",
+      "seed": 1,
+      "shd_proxy": 1,
+      "gt_idx": 14
+    },
+    {
+      "scenario": "v14_concept_shift",
+      "seed": 2,
+      "shd_proxy": 1,
+      "gt_idx": 14
+    },
+    {
+      "scenario": "time_gradual",
+      "seed": 0,
+      "shd_proxy": 1,
+      "gt_idx": 0
+    },
+    {
+      "scenario": "time_gradual",
+      "seed": 1,
+      "shd_proxy": 1,
+      "gt_idx": 0
+    },
+    {
+      "scenario": "time_gradual",
+      "seed": 2,
+      "shd_proxy": 1,
+      "gt_idx": 0
+    }
+  ],
+  "wilcoxon": {
+    "gnn_learned_gt_psi_stub_reciprocal_rank": {
+      "stat": 21.0,
+      "p": 0.015625,
+      "n_pairs": 9
+    },
+    "gnn_learned_gt_psi_stub_auroc": {
+      "stat": 21.0,
+      "p": 0.015625,
+      "n_pairs": 9
+    },
+    "gnn_learned_gt_cdag_structural_reciprocal_rank": {
+      "stat": 39.0,
+      "p": 0.029296875,
+      "n_pairs": 9
+    },
+    "gnn_learned_gt_cdag_structural_auroc": {
+      "stat": 39.0,
+      "p": 0.021484375,
+      "n_pairs": 9
+    }
+  }
+}
