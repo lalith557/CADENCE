@@ -116,10 +116,10 @@ Do these roughly in this order — later tasks depend on earlier ones being done
 - [ ] 6.6 Implement responsibility-score ranking from surrogate outputs — Date completed: __________
 
 ### Step 7 — PPO (Retraining Scope Optimizer)
-- [ ] 7.1 Build the Gym-style simulation environment (drift scenarios + cost/carbon model) — Date completed: __________
-- [ ] 7.2 Define state vector, action set, reward function — Date completed: __________
-- [ ] 7.3 Train PPO agent in simulation — Date completed: __________
-- [ ] 7.4 Validate PPO's decisions are sensible (doesn't always pick full retrain, doesn't ignore real drops) — Date completed: __________
+- [x] 7.1 Build the Gym-style simulation environment (drift scenarios + cost/carbon model) — Date completed: 2026-08-27 (Phase 1)
+- [x] 7.2 Define state vector, action set, reward function — Date completed: 2026-08-29 (state enriched to 15-d in Step A)
+- [x] 7.3 Train PPO agent in simulation — Date completed: 2026-08-28 (R-4) / re-run in Step A with Augmented-Lagrangian + EWC-in-sandbox pending
+- [ ] 7.4 Validate PPO's decisions are sensible (doesn't always pick full retrain, doesn't ignore real drops) — Date completed: __________ (Gate A eval queued)
 
 ### Step 8 — Retraining execution
 - [ ] 8.1 Implement no-op path (log-only) — Date completed: __________

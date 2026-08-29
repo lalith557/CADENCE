@@ -262,3 +262,31 @@ Format per entry:
   - FraudNet is a tiny MLP (4k params); 163 MB peak VRAM is dominated by the DataLoader worker's staging tensors, not the model. This does NOT yet prove the GPU carries a real workload — Steps B/C (GNN + surrogate on GPU) are where that becomes non-trivial.
   - `MLFLOW_ALLOW_FILE_STORE=true` is a workaround, not a migration. Long-term the plan should move MLflow to sqlite (`sqlite:///experiments/mlflow.db`) so tracking survives an mlflow major-version bump.
   - RTX 4070 Laptop's TFLOPs figure is the boost-clock spec, not measured — the 13.05 TFLOPs the matmul actually delivers is 84 % of nameplate, so the closed-form cost model will slightly *under*-estimate GPU-seconds. Acceptable for the paper's order-of-magnitude claims; not acceptable for a per-cent claim.
+
+---
+
+### R-Gate-A-smoke: Step A pipeline smoke — all four fixes exercised end-to-end   (2026-08-29)
+- **Hypothesis / question:** Do the four Step A code changes (contested-SLA scenarios, EWC-in-sandbox, Augmented-Lagrangian dual-λ, enriched observation) all execute together without regression? This is a wiring gate, not the Gate A statistical gate — Gate A itself requires the 10-seed × 30k-timestep run listed in the Threats-to-validity section below.
+- **Setup:**
+  - `python -m benchmarks.phase_a_run --seeds 1 --train-timesteps 200 --n-windows 2 --window-size 1024 --sla 0.65 --contested-only`.
+  - 3 contested scenarios: `contested_v14_partial_recoverable`, `contested_multi_feature_full_needed`, `contested_v14_tail_flip_unrecoverable`.
+  - Dual-λ config: `lambda_init=1.0`, `dual_lr=5.0`, `target_violation=0.0`. EWC penalty=1000, Fisher sample=1000, cached.
+  - RTX 4070 Laptop, torch 2.11+cu128.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase_a_run --seeds 1 --train-timesteps 200 \
+      --n-windows 2 --window-size 1024 --sla 0.65 --contested-only \
+      --out experiments/phase_a_smoke.json
+  ```
+- **Result (measured, wiring smoke — not the H2 gate):**
+  - `dual_update` events fire between episodes; λ climbed from 1.0 to 22.6 over the first ~40 episodes as violations accumulated, then oscillated as PPO started avoiding SLA-below states. This is the Augmented-Lagrangian working exactly as expected.
+  - PPO's action distribution during training included both `action_partial` (target_layer=layer1) and `action_full` — the sandbox is no longer stuck bang-bang on a single action, though 200 timesteps is too few to draw a policy conclusion.
+  - `fit_gpu_memory` logged max_allocated_mb≈163 MB inside every sandbox retrain, confirming §1b.4's "GPU actually used" check still holds under the Step A retrain path.
+  - EWC penalty was actually applied inside `_do_partial_retrain` — Fisher was computed once (cached), theta* snapshotted, and the penalty term added to the fine-tune loss. No NotImplementedError fallbacks logged.
+- **Statistical test:** N/A (wiring smoke).
+- **Interpretation:** The Step A plumbing is intact end-to-end. Every deliverable from Execution Plan §3 Step A that is *code* now executes together on GPU without regression. What remains is the Gate A *evidence* run — a full 10-seed × 5+-scenario × 30k-timestep sweep that will produce the paired Wilcoxon p-values needed to close H2. That run takes several hours of wall time on this laptop and is queued as its own R-entry.
+- **Threats to validity:**
+  - This entry is deliberately *not* the H2 gate. 1 seed × 200 timesteps × 2 windows tells you the code path works; it tells you nothing about which policy PPO would converge to at 30k timesteps.
+  - The three contested scenarios were calibrated by inspection, not by an exhaustive drift-severity sweep. If real F1 in a scenario lands substantially above or below the "just below SLA" band once run at n=15 windows, that scenario is not testing what it claims to test — the fix is to re-run `benchmarks.calibrate_contested` and adjust magnitudes.
+  - Augmented-Lagrangian dual-lr=5.0 was picked from prior-art (Chow et al. constrained-RL) without a per-project tune. If λ oscillates too aggressively in the full Gate A run, `--dual-lr 1.0` is the first knob to try.
+  - Contested-only mode skips the 5 default scenarios; the full Gate A includes them so the paired stats span >=5 scenarios per the plan's protocol.

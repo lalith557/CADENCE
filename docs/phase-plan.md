@@ -65,11 +65,46 @@ Along the way we discovered and fixed:
 - The paper story that survives: *controllable* cost/F1 trade-off via reward weights — baselines lack this knob.
 
 **Follow-ups queued for Phase 5 re-visit:**
-- Augmented-Lagrangian dual updates (W-22, D-16).
-- EWC penalty inside sandbox partial retrain (W-23).
-- Longer PPO training (30k+ timesteps) to escape bang-bang.
-- Contested-SLA scenarios (W-24).
+- Augmented-Lagrangian dual updates (W-22, D-16). ✅ landed in Step A (`cadence.rso.lagrangian`).
+- EWC penalty inside sandbox partial retrain (W-23). ✅ landed in Step A (`SandboxConfig.ewc_penalty`).
+- Longer PPO training (30k+ timesteps) to escape bang-bang. ✅ `phase_a_run.py` defaults to 30k.
+- Contested-SLA scenarios (W-24). ✅ `build_contested_sla_scenarios`.
 - Continuous / hybrid action space (fraction-of-layers) — new decision needed.
+
+---
+
+## Step A — Claim C rescue (Execution Plan §3) 🟡 CODE COMPLETE, GATE PENDING
+
+Everything Step A of the Execution Plan needs is in-tree; only the long-
+running Gate A eval (10 seeds × ≥5 scenarios × 30k PPO steps) hasn't landed
+its R-entry yet.
+
+**Landed:**
+- `benchmarks.synthetic_drift_gen.build_contested_sla_scenarios` — 3 scenarios
+  calibrated so each of {partial, full, no-op} is the correct action somewhere.
+  New `MultiFeatureShiftSpec` supports the "needs-full-retrain" case.
+- `cadence.rso.env.SandboxConfig` gained `ewc_penalty` / `ewc_fisher_sample_size`
+  / `ewc_cache_fisher`; `_do_partial_retrain` now computes Fisher on a historical
+  slice, caches theta*, and passes both to `adapter.partial_fit` — the sandbox
+  partial now matches Part 3B mechanics (fixes W-23).
+- Observation vector widened 13→15 with SLA margin + Herfindahl attribution
+  concentration (fixes W-24's "PPO can't tell whether responsibility is
+  concentrated or diffuse").
+- `cadence.rso.lagrangian.AugmentedLagrangianEnv` — gym.Wrapper that tracks
+  per-episode mean SLA violation and updates λ via dual ascent between resets
+  (fixes W-22 fixed-λ shortcoming).
+- `benchmarks.phase_a_run` — Gate A runner with `--train-timesteps 30000`,
+  `--seeds 10`, contested + default scenarios, paired Wilcoxon per scenario.
+- Tests: 7 new (4 scenarios, 3 dual-λ), all 45 suite tests green.
+
+**Gate A (H2, contested):** run
+```bash
+python -m benchmarks.phase_a_run --seeds 10 --train-timesteps 30000 \
+    --n-windows 15 --window-size 2048 --sla 0.65
+```
+Passing means: RSO beats periodic-retrain and reactive-full-retrain on GPU-hr
+at equal-or-better F1 recovery, with paired Wilcoxon p<0.05 on contested
+scenarios. Failure gets recorded honestly in `results.md` as `R-Gate-A`.
 
 ---
 
