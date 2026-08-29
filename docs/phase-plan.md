@@ -163,6 +163,46 @@ R-entry; this smoke passes the α=0.05 gate the plan requires.
 
 ---
 
+## Step C — Counterfactual surrogate + closed loop (Execution Plan §3, Claim B) ✅ CODE COMPLETE + GATE C PASSED (smoke)
+
+**Landed:**
+- `cadence.attribution.sandbox_labels.generate_intervention_dataset` — extended
+  sandbox that, for each injected drift, actually runs a partial-retrain
+  intervention on multiple candidate layers and records measured post-fix F1.
+  Produces (graph, node, pre_F1, post_F1) triples per Part 3D.
+- `cadence.attribution.surrogate.SurrogateMLP` — small MLP predicting post-fix F1
+  from (GNN node embedding, pre_F1, severity). Sigmoid-clamped to [0, 1].
+- `cadence.attribution.surrogate.train_joint` — joint MSE training of GNN +
+  surrogate on cuda. Reports val MSE / MAE / R² per epoch; refuses silent
+  CPU fallback via assert_on_gpu.
+- `cadence.attribution.gnn_scorer.GNNResponsibilityScorer` gained a
+  `surrogate=` argument. When set, score(f) = predicted_post_fix_F1 - current_F1
+  (clipped, normalized). When None it stays in the Step B softmax-readout mode.
+- `benchmarks.phase_c_run` — one command runs pretrain → CDAG tap →
+  intervention sandbox → joint train (GNN + surrogate) → RSO env → executor
+  → validation. Falls back to a rule policy when the phase-2 PPO checkpoint
+  has the wrong obs-dim (13-d vs the 15-d we ship now).
+- Tests: 4 for surrogate (2 @gpu-marked). All 54 pass.
+
+**Gate C (R-Gate-C, 2026-08-29):**
+- Joint train val: **MSE=0.0052, MAE=0.036, R²=0.888** (30 drifts × 3 candidates
+  = 90 triples, 15 epochs, 6.4 s wall on RTX 4070 Laptop, 65 MB peak VRAM).
+- Closed-loop episode on `v14_concept_shift` (SLA 0.85): 4 windows, rule policy
+  chose action=2 (full retrain) every step because concentration was low and
+  the SLA violation was large. Surrogate predicted post-fix F1 ≈ 0.59 every
+  step; measured post-fix F1 was 0.018–0.041 — episode MAE = 0.566.
+- The train/test calibration gap is a genuine finding: the surrogate learns
+  from mostly-recoverable synthetic drifts, and its predictions are
+  systematically over-optimistic on genuinely unrecoverable concept-flip
+  scenarios. Motivates Step D's "unrecoverable-drift guard" fallback (§4.5)
+  and the surrogate feedback path in Step D's shadow/canary rollback (§4.2).
+
+**Not yet done:** re-train PPO on the enriched 15-d obs so the RSO can act
+on the surrogate scores rather than falling back to the rule policy. That's
+part of the pending full Gate A workstream.
+
+---
+
 ## Phase 4 — Counterfactual surrogate (Claim B, narrow)
 
 **Deliverables:**

@@ -173,7 +173,14 @@ def _n_feature_nodes(samples: list[SandboxSample]) -> int:
 
 @dataclass
 class GNNResponsibilityScorer:
-    """Learned attribution scorer — score(f) ∝ softmax over trained GNN readouts."""
+    """Learned attribution scorer — score(f) ∝ softmax over trained GNN readouts.
+
+    If a `surrogate` is supplied (Step C), the scorer switches to
+    counterfactual-recovery mode:
+        score(f) = predicted_post_fix_f1_if_f_fixed - current_f1
+    normalized to [0, 1]. Otherwise it falls back to the Step B
+    softmax-over-readout-logits mode.
+    """
 
     model: CDAGSage
     tap: ActivationTap
@@ -185,6 +192,10 @@ class GNNResponsibilityScorer:
     notears_lambda: float = 0.05
     notears_max_iter: int = 25
     device: torch.device | None = None
+    # Step C surrogate — optional. When provided, use it for scoring.
+    surrogate: object | None = None
+    # Severity context fed to the surrogate at score-time (drift magnitude proxy).
+    surrogate_severity_ctx: float = 1.0
     name: str = "gnn_learned"
 
     @classmethod
@@ -253,13 +264,48 @@ class GNNResponsibilityScorer:
 
         self.model.eval()
         with torch.no_grad():
-            logits, _ = self.model(data)
-        n_feat = len(self.node_set.feature_indices)
-        feat_logits = logits[:n_feat].detach().cpu().numpy().astype(np.float32)
+            logits, emb = self.model(data)
 
-        # Softmax over feature nodes → probability mass; rescale to [0, 1].
-        z = feat_logits - feat_logits.max()
-        p = np.exp(z)
-        p = p / (p.sum() + 1e-9)
-        p = p / (p.max() + 1e-9)
-        return p.astype(np.float32)
+        n_feat = len(self.node_set.feature_indices)
+
+        if self.surrogate is None:
+            # Step B mode — softmax over feature-node readout logits.
+            feat_logits = logits[:n_feat].detach().cpu().numpy().astype(np.float32)
+            z = feat_logits - feat_logits.max()
+            p = np.exp(z)
+            p = p / (p.sum() + 1e-9)
+            p = p / (p.max() + 1e-9)
+            return p.astype(np.float32)
+
+        # Step C surrogate mode.
+        # score(f) = predicted post-fix F1 (per Part 3D)
+        #          - current F1 (only used to shift, never negative-clipped
+        #            because a decrease still ranks lower).
+        self.surrogate.eval()
+        dev = self.device if self.device is not None else torch.device("cpu")
+        with torch.no_grad():
+            # Batch all feature-node embeddings through the surrogate once.
+            feat_node_idx = torch.tensor(
+                self.node_set.feature_indices, dtype=torch.long, device=dev
+            )
+            node_embs = emb.index_select(0, feat_node_idx)  # (n_feat, emb_dim)
+            ctx = torch.tensor(
+                [[float(current_f1), float(self.surrogate_severity_ctx)]] * n_feat,
+                dtype=torch.float32,
+                device=dev,
+            )
+            pred_post = self.surrogate(node_embs, ctx)  # (n_feat,)
+            delta = (pred_post - float(current_f1)).detach().cpu().numpy().astype(np.float32)
+
+        # Normalize to [0, 1] with a clamp: negative deltas → very low score,
+        # positive deltas → mapped by max.
+        scores = np.clip(delta, 0.0, None)
+        m = float(scores.max())
+        if m <= 1e-9:
+            # No candidate is predicted to help — fall back to softmax logits.
+            feat_logits = logits[:n_feat].detach().cpu().numpy().astype(np.float32)
+            z = feat_logits - feat_logits.max()
+            p = np.exp(z)
+            p = p / (p.sum() + 1e-9)
+            return (p / (p.max() + 1e-9)).astype(np.float32)
+        return (scores / m).astype(np.float32)

@@ -1,0 +1,88 @@
+{
+  "config": {
+    "config": "configs/default.yaml",
+    "n_drifts": 25,
+    "candidates_per_drift": 3,
+    "finetune_epochs": 1,
+    "sandbox_window_size": 512,
+    "sandbox_windows_per_sample": 2,
+    "joint_epochs": 15,
+    "joint_lr": 0.003,
+    "eval_scenario": "amount_multiplicative_gradual",
+    "eval_windows": 4,
+    "window_size": 1024,
+    "sla": 0.65,
+    "ppo_checkpoint": "experiments/rso_ppo_phase2.zip",
+    "out": "experiments/phase_c_smoke.json"
+  },
+  "baseline_f1": 0.7142857142857143,
+  "baseline_threshold": 0.9999,
+  "n_intervention_triples": 75,
+  "joint_train": {
+    "final_val_mse": 0.005358622980323465,
+    "final_val_mae": 0.04267323113786238,
+    "final_val_r2": 0.8593133238858096,
+    "wall_s": 5.523439300013706,
+    "max_vram_mb": 65.338,
+    "val_preds": [
+      0.4604742228984833,
+      0.7914444208145142,
+      0.46564748883247375,
+      0.8153683543205261,
+      0.7879750728607178,
+      0.40554824471473694,
+      0.792759895324707,
+      0.8082823753356934,
+      0.8213679790496826,
+      0.7882375717163086,
+      0.8076567649841309,
+      0.8198168873786926,
+      0.813833475112915,
+      0.8151111602783203,
+      0.34327617287635803
+    ],
+    "val_targets": [
+      0.5747800586510264,
+      0.8,
+      0.5797101449275363,
+      0.8,
+      0.8,
+      0.18181818181818182,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.2962962962962963
+    ]
+  },
+  "episode": {
+    "action_counts": {
+      "0": 1,
+      "1": 0,
+      "2": 0
+    },
+    "calibration_mae": 0.021519494056701616,
+    "calibration_r2": -463088623.4564162,
+    "rows": [
+      {
+        "step": 0,
+        "action": 0,
+        "top_feature": 8,
+        "pre_f1": 0.8,
+        "predicted_post_f1": 0.8215194940567017,
+        "measured_post_f1": 0.8,
+        "cost_gpu_hr": 0.0,
+        "cost_kg_co2": 0.0
+      }
+    ]
+  },
+  "gpu_memory_end": {
+    "allocated": 68642816,
+    "max_allocated": 69289984,
+    "reserved": 169869312
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "config": {
+    "config": "configs/default.yaml",
+    "n_drifts": 30,
+    "candidates_per_drift": 3,
+    "finetune_epochs": 1,
+    "sandbox_window_size": 512,
+    "sandbox_windows_per_sample": 2,
+    "joint_epochs": 15,
+    "joint_lr": 0.003,
+    "eval_scenario": "v14_concept_shift",
+    "eval_windows": 4,
+    "window_size": 1024,
+    "sla": 0.85,
+    "ppo_checkpoint": "experiments/rso_ppo_phase2.zip",
+    "out": "experiments/phase_c_smoke2.json"
+  },
+  "baseline_f1": 0.7142857142857143,
+  "baseline_threshold": 0.9999,
+  "n_intervention_triples": 90,
+  "joint_train": {
+    "final_val_mse": 0.005219833477771847,
+    "final_val_mae": 0.03594384323702868,
+    "final_val_r2": 0.8881534072522896,
+    "wall_s": 6.442930599994725,
+    "max_vram_mb": 65.375,
+    "val_preds": [
+      0.7907674908638,
+      0.8112069964408875,
+      0.34938597679138184,
+      0.8067202568054199,
+      0.8097813129425049,
+      0.8137818574905396,
+      0.3222718834877014,
+      0.797282874584198,
+      0.8074177503585815,
+      0.8127575516700745,
+      0.5198119282722473,
+      0.8190132975578308,
+      0.808307409286499,
+      0.8185240030288696,
+      0.8047338128089905,
+      0.4334270656108856,
+      0.7699229717254639,
+      0.7994242310523987
+    ],
+    "val_targets": [
+      0.8,
+      0.8,
+      0.1947261663286004,
+      0.8,
+      0.8,
+      0.8,
+      0.2962962962962963,
+      0.8,
+      0.8,
+      0.8,
+      0.5797101449275363,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.18181818181818182,
+      0.8,
+      0.8
+    ]
+  },
+  "episode": {
+    "action_counts": {
+      "0": 0,
+      "1": 0,
+      "2": 4
+    },
+    "calibration_mae": 0.5656833830749974,
+    "calibration_r2": -3238.4523141863747,
+    "rows": [
+      {
+        "step": 0,
+        "action": 2,
+        "top_feature": 8,
+        "pre_f1": 0.017699115044247787,
+        "predicted_post_f1": 0.5916572213172913,
+        "measured_post_f1": 0.017699115044247787,
+        "cost_gpu_hr": 1.3701664532650449e-06,
+        "cost_kg_co2": 4.679255454545454e-08
+      },
+      {
+        "step": 1,
+        "action": 2,
+        "top_feature": 8,
+        "pre_f1": 0.017699115044247787,
+        "predicted_post_f1": 0.5906302332878113,
+        "measured_post_f1": 0.017937219730941704,
+        "cost_gpu_hr": 1.3701664532650449e-06,
+        "cost_kg_co2": 4.679255454545454e-08
+      },
+      {
+        "step": 2,
+        "action": 2,
+        "top_feature": 28,
+        "pre_f1": 0.017937219730941704,
+        "predicted_post_f1": 0.5898847579956055,
+        "measured_post_f1": 0.018604651162790697,
+        "cost_gpu_hr": 1.3701664532650449e-06,
+        "cost_kg_co2": 4.679255454545454e-08
+      },
+      {
+        "step": 3,
+        "action": 2,
+        "top_feature": 23,
+        "pre_f1": 0.018604651162790697,
+        "predicted_post_f1": 0.5858279466629028,
+        "measured_post_f1": 0.041025641025641026,
+        "cost_gpu_hr": 1.3701664532650449e-06,
+        "cost_kg_co2": 4.679255454545454e-08
+      }
+    ]
+  },
+  "gpu_memory_end": {
+    "allocated": 68700672,
+    "max_allocated": 171870720,
+    "reserved": 253755392
+  }
+}
