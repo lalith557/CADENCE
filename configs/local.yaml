@@ -1,0 +1,67 @@
+# CADENCE — local dev profile. Uses the dev machine's extra VRAM headroom.
+# NEVER let numbers from this profile land in docs/results.md.
+profile: local
+
+data:
+  root: Dataset
+  fraud_csv: Dataset/Credit Card Fraud Detection/creditcard.csv
+  gmsc_train_csv: Dataset/Give Me Some Credit/cs-training.csv
+  telco_csv: Dataset/Telco Customer Churn/WA_Fn-UseC_-Telco-Customer-Churn.csv
+  adult_dir: Dataset/adult
+  torchvision_cache: .cadence_cache/torchvision
+  test_size: 0.2
+  val_size: 0.1
+
+model:
+  hidden_dims: [64, 32]
+  dropout: 0.2
+  lr: 0.001
+  batch_size: 512
+  max_epochs: 30
+  early_stopping_patience: 5
+  class_weighted: true
+
+cdag:
+  layer_1_clusters: 8
+  layer_2_clusters: 4
+  cluster_k_sweep: [2, 16]
+  window_size: 2048
+  stats: [mean, var, skew]
+  pc_alpha: 0.05
+  notears_lambda: 0.01
+  notears_max_iter: 100
+
+rso:
+  top_k: 5
+  w_gpu_hr: 0.05
+  w_kg_co2: 0.5
+  lambda_sla_init: 1.0
+  lambda_update_period: 10
+  ppo_lr: 0.0003
+  ppo_clip: 0.2
+  ppo_gamma: 0.99
+  ppo_gae_lambda: 0.95
+
+executor:
+  fisher_sample_size: 5000
+  replay_ratio_new: 0.7
+  finetune_lr: 0.0001
+  finetune_max_epochs: 10
+  ewc_lambda: 1000.0
+  tau_partial_unfreeze: 0.15
+  tau_diffuse_escalate: 0.60
+
+sla:
+  f1_relative_floor: 0.95
+  shadow_window_hours: 24
+  forgetting_epsilon: 0.02
+
+budget:
+  max_vram_gb: 8.0
+  seeds_headline: 10
+  seeds_ablation: 5
+
+experiment:
+  seed: 42
+  mlflow_uri: file:./experiments/mlruns
+  experiment_name: cadence-local

@@ -1,0 +1,140 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cadence"
+version = "0.0.1"
+description = "CADENCE — Causal Attribution-Driven Efficient Continual Retraining for Production ML Systems"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Gona Lalith" }]
+keywords = ["mlops", "continual-learning", "causal-inference", "drift-detection"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# Core dependencies — everything required for Phase 0 + Phase 1 baselines.
+# Heavy ML/RL/causal-graph deps are separated below so `pip install -e .` never
+# fails on wheel resolution the first time somebody clones the repo.
+dependencies = [
+    "numpy>=1.26,<2.2",
+    "pandas>=2.1,<2.3",
+    "scipy>=1.11,<1.15",
+    "scikit-learn>=1.4,<1.6",
+    "pydantic>=2.6,<3",
+    "pydantic-settings>=2.2,<3",
+    "pyyaml>=6,<7",
+    "structlog>=24.1,<25",
+    "rich>=13,<14",
+    "click>=8.1,<9",
+    "mlflow>=2.10,<2.20",
+    "tqdm>=4.66,<5",
+    "joblib>=1.3,<2",
+]
+
+[project.optional-dependencies]
+# The neural / GNN / RL stack — install with `pip install -e .[ml]`.
+# torch first so PyG's build sees a torch install.
+ml = [
+    "torch>=2.2,<2.6",
+    "lightgbm>=4.1,<4.6",
+    "stable-baselines3>=2.2,<2.5",
+    "gymnasium>=0.29,<1.1",
+    "codecarbon>=2.3,<2.9",
+]
+# Graph neural net stack — install with `pip install -e .[gnn]`.
+# Kept separate because torch-scatter/torch-sparse wheels can be finicky on Windows.
+gnn = [
+    "torch-geometric>=2.4,<2.7",
+]
+# Causal-discovery libs — install with `pip install -e .[causal]`.
+causal = [
+    "causal-learn>=0.1.3.8",
+    "gcastle>=1.0.4",
+    "networkx>=3.2,<4",
+]
+# Streaming drift + real-world drift dataset loaders.
+# NOTE: `river` moved to the optional `[river]` extra — it requires a Rust
+# toolchain to build on Windows and is not needed by Phase 1's synthetic
+# drift experiments. See D-13.
+drift = []
+river = [
+    "river>=0.21,<0.24",
+]
+# Continual-learning benchmarks — Phase 6 only.
+cl = [
+    "avalanche-lib>=0.5,<0.7",
+]
+# API / dashboard.
+api = [
+    "fastapi>=0.110,<0.116",
+    "uvicorn[standard]>=0.27,<0.35",
+    "streamlit>=1.32,<1.42",
+    "plotly>=5.18,<6",
+]
+# Dev tools.
+dev = [
+    "pytest>=8,<9",
+    "pytest-cov>=4.1,<6",
+    "pytest-xdist>=3.5,<4",
+    "ruff>=0.4,<0.9",
+    "mypy>=1.9,<2",
+    "types-PyYAML",
+    "pandas-stubs",
+]
+# Convenience meta-extra — everything.
+all = [
+    "cadence[ml,gnn,causal,drift,cl,api,dev,river]",
+]
+
+[project.scripts]
+cadence = "cadence.cli:main"
+
+[tool.setuptools]
+packages = { find = { include = ["cadence*"] } }
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM"]
+ignore = ["E501"]  # handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+# X, y are the numpy/sklearn convention — allow uppercase names in ML code.
+"cadence/data/**.py" = ["N803", "N806"]
+"cadence/adapters/**.py" = ["N803", "N806"]
+"cadence/collector/**.py" = ["N803", "N806"]
+"cadence/cdag/**.py" = ["N803", "N806"]
+"cadence/attribution/**.py" = ["N803", "N806"]
+"cadence/executor/**.py" = ["N803", "N806"]
+"cadence/rso/**.py" = ["N803", "N806"]
+"cadence/carbon/**.py" = ["B008"]
+"benchmarks/**.py" = ["N803", "N806", "SIM113", "F841"]
+"tests/**.py" = ["N802", "N803", "N806"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+disallow_untyped_defs = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "slow: takes >5s (skip with -m 'not slow')",
+    "gpu: requires a CUDA GPU",
+    "integration: end-to-end pipeline",
+    "needs_dataset: needs a file in Dataset/ that isn't committed",
+]

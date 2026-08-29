@@ -1,0 +1,72 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+.tox/
+.nox/
+
+# --- Virtual envs ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# --- OS ---
+Thumbs.db
+
+# --- MLflow local store ---
+experiments/mlruns/
+experiments/**/artifacts/
+
+# --- CADENCE runtime caches ---
+.cadence_cache/
+*.ckpt
+*.pt
+outputs/
+
+# --- Data: never commit raw Kaggle/UCI files ---
+# Full Dataset/ tree is populated locally per CADENCE-datasets-verified.md;
+# committing it violates Kaggle terms and would bloat the repo (>500k files).
+Dataset/*
+!Dataset/README.md
+
+# --- MLruns at top-level (in addition to experiments/mlruns) ---
+mlruns/
+
+# --- Notes / one-shot output the plan flagged as un-committable ---
+*.zip
+!experiments/**/artifacts/model.pkl
+cadence.egg-info/
+
+# --- Torchvision downloads ---
+data/MNIST/
+data/CIFAR10/
+
+# --- Streamlit ---
+.streamlit/secrets.toml
+
+# --- CodeCarbon output ---
+emissions.csv

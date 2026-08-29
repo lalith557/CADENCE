@@ -1,0 +1,236 @@
+# CADENCE — Measured Results Ledger
+
+**Measured numbers only.** If you didn't run it, it doesn't go here. If a hypothesis fails, record the failure honestly — it's a result, not an embarrassment.
+
+Format per entry:
+
+```
+### R-<n>: <experiment name>   (<YYYY-MM-DD>)
+- **Hypothesis / question:** (H1/H2/H3 where relevant)
+- **Setup:** dataset, drift type, baseline(s), seeds, config hash / MLflow run id
+- **Command to reproduce:** exact CLI line
+- **Result:** actual numbers, with mean ± std / 95% CI over seeds
+- **Statistical test:** paired t-test or Wilcoxon vs baseline, p-value, effect size
+- **Interpretation:** what it means, honestly (including negative results)
+- **Threats to validity:** what could make this misleading
+```
+
+---
+
+### R-0: Phase 0 gate — clean install + tests + CLI + all four Kaggle/UCI datasets load   (2026-08-26)
+- **Hypothesis / question:** Does a fresh Python 3.10 venv → `pip install -e .[dev]` → `pytest` → `cadence smoke` → `cadence datasets-check` all pass on the dev machine, with no missing deps and all four datasets loadable?
+- **Setup:** Python 3.10.11 (Windows), fresh `.venv`, dev machine: RTX 4070 (8 GB), CUDA 13.1 driver. Base git SHA `4f599bc` (before Phase 0 scaffolding commit). Config: `configs/ci.yaml`.
+- **Command to reproduce:**
+  ```bash
+  python -m venv .venv && .venv\Scripts\python.exe -m pip install --upgrade pip
+  .venv\Scripts\python.exe -m pip install -e .[dev]
+  .venv\Scripts\python.exe -m pytest -m "not needs_dataset and not gpu and not slow"
+  .venv\Scripts\python.exe -m cadence.cli smoke -c configs/ci.yaml
+  .venv\Scripts\python.exe -m cadence.cli datasets-check -c configs/default.yaml
+  ```
+- **Result:**
+  - Install: exit 0.
+  - Tests: **13 passed, 4 deselected (needs_dataset markers), 16 warnings** (all upstream Pydantic-v1-in-MLflow deprecation notices, none from CADENCE), 2.49 s.
+  - Ruff lint + format: `All checks passed! 27 files already formatted`.
+  - CLI `smoke`: MLflow run created (`run_id=b1847a5c421646d09d0043cc9879dcf0`), config hash `46a28fb36172`.
+  - CLI `datasets-check`: all four datasets load with the expected shapes:
+
+    | dataset | n_train | n_test | n_features | positive rate |
+    |---|---|---|---|---|
+    | credit_card_fraud | 227,845 | 56,962 | 30 | 0.173% (train) / 0.172% (test) |
+    | give_me_some_credit | 120,000 | 30,000 | 10 | 6.68% / 6.68% |
+    | telco_churn | 5,634 | 1,409 | 30 (one-hot) | 26.5% / 26.5% |
+    | adult | 24,129 | 6,033 | 96 (one-hot) | 24.9% / 24.9% |
+
+- **Statistical test:** N/A (setup gate, not a hypothesis test).
+- **Interpretation:** Phase 0 gate passes. Scaffold reproduces from clean venv. All four production-model-adapter datasets are present and load with the expected class balances (Fraud is 0.17% positive as documented; GMSC ~7%; Telco ~26.5%; Adult ~24.9%). The 16 pytest warnings are all upstream Pydantic-v1 deprecations from `mlflow/gateway/config.py`, not from CADENCE code; MLflow >=2.20 fixes them but that release also broke a few tracking-server tests we depend on.
+- **Threats to validity:**
+  - Fraud/GMSC/Telco/Adult datasets are cached on this specific dev machine — a truly clean clone on another box won't have them until the operator downloads from Kaggle/UCI. The `needs_dataset` marker skips gracefully.
+  - Ran only on Windows so far; CI matrix pins Ubuntu latest but hasn't been executed yet (repo isn't pushed).
+  - GPU code (torch, torch-geometric) is deliberately not installed in the `[dev]` extra, so this gate does not exercise CUDA. That comes in Phase 1's gate.
+
+---
+
+### R-1: FraudNet baseline on Credit Card Fraud (undrifted, threshold-tuned)   (2026-08-27)
+- **Hypothesis / question:** What is the pretrained FraudNet's honest performance on the undrifted Credit Card Fraud test set? This is the reference number every drift experiment compares against.
+- **Setup:** 227,845 train × 30 features (D-1 arch). Class-weighted BCE + Adam(lr=1e-3), batch 256, up to 30 epochs w/ patience 5. Decision threshold tuned on validation via 101-point F1 sweep (D-14). Ran on RTX 4070 with `configs/default.yaml`. Fixed seed 42.
+- **Command to reproduce:**
+  ```bash
+  cadence datasets-check
+  # then within phase1_run.py, the pretrained adapter is trained once at seed 42
+  python -m benchmarks.phase1_run --config configs/default.yaml --seeds 1 --scenario amount_multiplicative_abrupt
+  ```
+- **Result:**
+  - Pretrained AUROC on test set: **0.975**
+  - Pretrained F1 at threshold 0.5: **0.185** (recall 0.90, precision 0.10 — the "wrong threshold" symptom, W-16)
+  - Pretrained F1 at tuned threshold: **0.798** (best_val_f1 from training log)
+  - Pretraining wall time: ~30s, ~2s per epoch on RTX 4070 with batch 256.
+- **Statistical test:** N/A (single-seed baseline number).
+- **Interpretation:** Model quality is fine; the entire ~0.60 F1 gap between "naive threshold" and "tuned threshold" is threshold-selection, not model deficit. This is why D-14 pins tuned-threshold as the mandatory F1 protocol for every FraudNet result in the paper. All R-2/R-3 numbers below use the tuned threshold.
+- **Threats to validity:**
+  - Single seed. Multi-seed pretraining variance TBD in Phase 2 gate (which retrains for each seed anyway).
+  - F1 depends on tuned threshold; if the paper's SLA is expressed relative to this baseline, small pretraining variance moves the SLA line.
+
+---
+
+### R-2: Phase 1 baselines — PSI+full-retrain vs fixed-schedule vs EWC-only, `amount_multiplicative_abrupt` drift, 5 seeds   (2026-08-27)
+- **Hypothesis / question:** Under an abrupt covariate shift (Amount × 1.5), how do the three baselines compare on mean F1, retraining cost, and SLA violations across 15 windows of 2048 rows? These are the peers CADENCE must beat in Phase 2.
+- **Setup:**
+  - Adapter: FraudNet (D-1), decision threshold tuned per fit (D-14).
+  - Drift: `amount_multiplicative_abrupt` (Amount feature × 1.5, hits at step 0, ground-truth root cause = feature index 29 "Amount").
+  - Stream: 25% held-out slice of `X_train` — never seen during pretraining (W-18 fix).
+  - Trigger: PSI per-feature, threshold 0.25 (D-10). Fresh strategy instance per seed (W-19 fix).
+  - 15 windows × 2048 rows = 30,720 rows per episode.
+  - SLA: 0.65 F1 (chosen so it's below the ~0.80 pretraining ceiling but above the initial drift dip).
+  - 5 seeds (0..4), MLflow experiment `cadence-default` run tagged `phase1-amount_multiplicative_abrupt`, config hash `46a28fb36172`, git SHA post-Phase-1.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase1_run \
+      --config configs/default.yaml \
+      --seeds 5 \
+      --scenario amount_multiplicative_abrupt \
+      --n-windows 15 --window-size 2048 --sla 0.65
+  ```
+- **Result (measured):**
+
+  | strategy | mean F1 | min F1 | GPU-hr | kg CO₂ | SLA windows below (of 15) | forgetting (Δ unrelated F1) |
+  |---|---|---|---|---|---|---|
+  | psi_full_retrain | 0.8344 ± 0.0133 | 0.4943 ± 0.0547 | 2.4×10⁻⁴ ± 4.7×10⁻⁵ | 5.8×10⁻⁶ ± 1.1×10⁻⁶ | 2.4 ± 0.5 | −0.0945 ± 0.032 |
+  | fixed_schedule | 0.8229 ± 0.0089 | 0.3333 ± 0.0000 | 2.7×10⁻⁵ ± 0 | 6.5×10⁻⁷ ± 0 | 1.2 ± 0.4 | −0.0946 ± 0.032 |
+  | ewc_only | 0.7694 ± 0.0000 | 0.0000 ± 0.0000 | 8.6×10⁻⁷ ± 0 | 2.1×10⁻⁸ ± 0 | 3.0 ± 0.0 | −0.0429 ± 0.013 |
+
+- **Statistical test (paired Wilcoxon on mean_f1, n=5):**
+  - psi_full_retrain vs fixed_schedule: W=1, p=0.125 (not significant at α=0.05)
+  - psi_full_retrain vs ewc_only: W=0, p=0.0625 (borderline)
+  - fixed_schedule vs ewc_only: W=0, p=0.0625 (borderline)
+
+- **Interpretation (honest):**
+  - **Ranking by mean_f1**: PSI+full > fixed-schedule > EWC-only. PSI-driven full retrain wins because it targets the exact windows with covariate shift and pays for a full retrain each time.
+  - **fixed_schedule beats EWC-only on mean F1 despite being blind to drift**, because Amount×1.5 abrupt shift is fully learnable from the ~2k-row window that becomes each retrain's training data — no "targeting" required.
+  - **EWC-only underperforms** because the strong EWC penalty (λ=1000) plus a single-window fine-tune keeps the model too close to its pre-drift weights, undoing part of what a naive fine-tune would have recovered.
+  - **Cost gap between PSI+full and EWC-only is ~280×**: 0.86 μhr vs 240 μhr per episode. This is the compute wastage CADENCE's RSO must attack — pay for retrains only when a *localized* retrain isn't enough.
+  - **All three baselines have SLIGHTLY IMPROVED unrelated-F1** (forgetting is negative) — flagged as W-21; our current "unrelated" slice is a random split of the same distribution, not a genuinely disjoint sub-population, so any retrain that keeps the classifier reasonable can improve it slightly. Real forgetting measurements land in Phase 5 with a redesigned unrelated segment.
+
+- **Threats to validity:**
+  - Only 5 seeds × 1 scenario (W-20) — the paper's headline numbers need 10 × 5. Statistical power is limited; borderline p=0.0625 could go either way with more seeds.
+  - `ewc_only` mean_f1 is identical to 16 digits across seeds because the tuned-threshold F1 lands on the same integer TP/FP counts. This is a real property of the eval, not a bug — but it means seed variance on this strategy shows up only in forgetting, not F1.
+  - Drift is on scaled features (post-StandardScaler); Amount×1.5 in that space is a smaller absolute shift than it looks. Some scenarios (V14 concept shift) should produce larger F1 drops — will test in the Phase 1 → Phase 2 transition.
+  - Retraining data is small (2048 rows with ~4 positives / window per W-17); results may differ under larger windows.
+
+---
+
+### R-3: Phase 1 baselines — carbon-per-recovery (derived from R-2)   (2026-08-27)
+- **Hypothesis / question:** Per unit of SLA recovery, which baseline is cheapest? This is the H2 preview number the RSO must beat in Phase 2.
+- **Setup:** Derived directly from R-2's aggregates. Recovery-events = number of times F1 ≥ SLA immediately after an action. Cost-per-recovery = total_kg_co2 / (n_windows − sla_below).
+- **Result:**
+
+  | strategy | recoveries per episode (of 15 windows) | kg CO₂ per recovery |
+  |---|---|---|
+  | psi_full_retrain | 12.6 | 4.6×10⁻⁷ |
+  | fixed_schedule | 13.8 | 4.7×10⁻⁸ |
+  | ewc_only | 12.0 | 1.7×10⁻⁹ |
+
+- **Interpretation:** Fixed-schedule and EWC-only look ultra-cheap only because they retrain on tiny 2-3k-row windows. PSI+full pays a real cost. The RSO in Phase 2 must find the right trade-off — retrain when it *actually helps*, not just when a rule fires.
+- **Threats to validity:** carbon numbers derive from the closed-form model in `cadence.carbon.model`; the CodeCarbon-measured comparison lands in Phase 2's gate when episodes are longer and the measurement noise floor is above the sandbox model's precision.
+
+---
+
+### R-4: Phase 2 — RSO/PPO vs baselines (H2), 5 seeds × 5 scenarios, default reward weights   (2026-08-28)
+- **Hypothesis / question (H2):** Does the RSO (SB3 PPO with the D-7/D-16 reward) reduce total retraining compute vs periodic-retrain and reactive-full-retrain baselines while maintaining equal-or-better SLA recovery?
+- **Setup:**
+  - Adapter: FraudNet (D-1) with tuned threshold (D-14), pretrained once at seed=42.
+  - Scenarios: all 5 defaults from `build_default_scenarios` (Amount abrupt/gradual, V14 additive/concept, Time gradual).
+  - Trigger: PSI per feature (D-10) with threshold 0.25. Same trigger for baselines and for the PSI-based responsibility scorer feeding the RSO (D-16 stub, W-19 fixed).
+  - PPO: 3000 timesteps total, `MlpPolicy`, LR 3e-4, γ=0.99, GAE λ=0.95, clip 0.2, 10 epochs per update, n_steps=128, seed=42. Trained round-robin across all 5 scenarios (D-15). Fast sandbox during training (`finetune_epochs=1`, `fullretrain_epochs=1`), full-fidelity during eval (5 / 15).
+  - Reward weights: w_gpu_hr=0.05, w_kg_co2=0.5, λ_sla=1.0 (D-7 defaults).
+  - 5 seeds per (strategy × scenario), MLflow run `phase2-train-amount_multiplicative_abrupt`, config hash `46a28fb36172`.
+  - Baselines: PSI+full, fixed-schedule, EWC-only from R-2 — identical config, re-run here for reproducibility.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase2_run --config configs/default.yaml \
+      --seeds 5 --scenarios all --n-windows 15 --window-size 2048 --sla 0.65 \
+      --train-timesteps 3000
+  ```
+- **Result (measured, per scenario):**
+
+  | scenario | strategy | mean F1 | GPU-hr | SLA windows below (of 15) | actions {no-op, partial, full} |
+  |---|---|---|---|---|---|
+  | amount_multiplicative_abrupt | psi_full_retrain | 0.8344 ± 0.013 | 2.03×10⁻⁴ ± 0 | 2.4 | (baseline) |
+  |   | fixed_schedule | 0.8229 ± 0.009 | 2.71×10⁻⁵ ± 0 | 1.2 | (baseline) |
+  |   | ewc_only | 0.7694 ± 0.000 | 8.59×10⁻⁷ ± 0 | 3.0 | (baseline) |
+  |   | **rso_ppo** | **0.7539 ± 0.000** | **0.00** | 2.0 | **{15, 0, 0}** |
+  | amount_multiplicative_gradual | psi_full_retrain | 0.8297 ± 0.018 | 2.03×10⁻⁴ | 2.4 | — |
+  |   | rso_ppo | 0.7539 ± 0.000 | 0.00 | 2.0 | {15, 0, 0} |
+  | v14_additive_abrupt | psi_full_retrain | 0.8301 ± 0.013 | 2.03×10⁻⁴ | 2.0 | — |
+  |   | rso_ppo | 0.7444 ± 0.000 | 0.00 | 2.0 | {15, 0, 0} |
+  | v14_concept_shift | *all four* | ≈0.0136 | 0.00 | 15.0 | — |
+  | time_gradual | psi_full_retrain | 0.8272 ± 0.016 | 2.03×10⁻⁴ | 1.6 | — |
+  |   | rso_ppo | 0.7634 ± 0.000 | 0.00 | 2.0 | {15, 0, 0} |
+
+- **Statistical test (paired Wilcoxon, n=5):**
+  - RSO vs psi_full_retrain on GPU-hr: p=0.0625 (borderline; RSO strictly cheaper)
+  - RSO vs psi_full_retrain on mean_f1: p=0.0625 (borderline; RSO strictly worse)
+  - Same pattern for RSO vs fixed_schedule and vs ewc_only.
+  - `v14_concept_shift`: all strategies collapse to F1≈0.01 — trivially tied.
+
+- **Interpretation (honest):**
+  - PPO **converged to a "no-op forever" policy** across all four recoverable scenarios (action counts {15, 0, 0}). Under the D-7 default weights, this IS the reward-optimal choice: mean F1 ≈ 0.75 exceeds the SLA of 0.65, so the Lagrangian penalty never activates, and any retrain incurs cost. The rational play is to skip retraining.
+  - This is a **tunable-trade-off result, not a Pareto-improvement result**. H2 as originally stated ("reduce cost at equal-or-better F1") is NOT supported by these numbers — RSO gives up ~0.07 F1 to cut cost to zero.
+  - **`v14_concept_shift` is unrecoverable for every strategy** — F1 crashes to 0.01 because the label rule flipped and no covariate-shift retrain can invert the model's decision boundary without new correct labels. A real research finding worth putting in the paper's limitations section.
+  - **RSO's win, correctly framed, is *controllability*.** Baselines can only "always full" / "always fixed" / "PSI-triggered." RSO has one policy that can be dialed via reward weights to sit anywhere on the cost/F1 curve. R-4b (below, once sweep completes) shows where along that curve the sweet spot is.
+
+- **Threats to validity:**
+  - Only 3000 training timesteps — PPO likely hasn't fully explored the action space. The "no-op wins" answer is a *local optimum*; more training MIGHT find a better mixed policy. Explicit follow-up: rerun at 30k timesteps in Phase 5.
+  - The sandbox partial retrain does not use EWC penalty (W-23), so the "partial" action available to PPO is a weaker version of what the paper's Part 3B code describes. Fixing this before final numbers land.
+  - v14_concept_shift's uniform collapse to F1≈0.01 might mask *some* variance if the flip probability were tuned down. Follow-up: sweep flip_probability ∈ {0.2, 0.5, 0.8}.
+  - PSI-based responsibility scorer (D-16 stub) — CDAG-based scorer in Phase 3 may change the state distribution PPO sees.
+
+- **Next step:** the reward-weight sensitivity sweep (`benchmarks/phase2_sweep.py`, currently running) will produce R-4b: a 3×3 grid over (w_gpu_hr, λ_sla) showing where RSO's policy shifts from "no-op forever" to "trigger-driven retrain," and whether any cell delivers a strict Pareto improvement over baselines.
+
+---
+
+### R-4b: Phase 2 sensitivity sweep — 3×3 (w_gpu_hr, λ_sla), 2 seeds × 2 scenarios × 800 train steps   (2026-08-28)
+- **Hypothesis / question:** Does any cell in the (w_gpu_hr, λ_sla) grid produce an RSO policy that beats baselines on cost while matching them on F1?
+- **Setup:**
+  - Grid: w_gpu_hr ∈ {0.01, 0.05, 0.20}, λ_sla ∈ {0.5, 1.0, 2.0}. 9 cells total.
+  - Per cell: PPO trained 800 timesteps on rotation across 2 scenarios (`amount_multiplicative_abrupt`, `amount_multiplicative_gradual`); eval on 3 seeds × 2 scenarios.
+  - Fast sandbox during training (`finetune_epochs=1`, `fullretrain_epochs=1`), full-fidelity during eval (5 / 15). N=10 windows per episode.
+  - `gc.collect() + torch.cuda.empty_cache()` between cells (per W-26 fix from first-attempt OOM).
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase2_sweep --config configs/default.yaml \
+      --seeds 2 --train-timesteps 800 --n-windows 10 --window-size 2048 --sla 0.65
+  ```
+- **Result (measured):**
+
+  | w_gpu_hr | λ_sla | mean_f1 | GPU-hr | actions {no-op, partial, full} |
+  |---|---|---|---|---|
+  | 0.01 | 0.5 | 0.7353 ± 0.000 | 5.7×10⁻⁷ | {0, 10, 0} |
+  | 0.01 | 1.0 | 0.7353 ± 0.000 | 5.7×10⁻⁷ | {0, 10, 0} |
+  | 0.01 | 2.0 | 0.7353 ± 0.000 | 5.7×10⁻⁷ | {0, 10, 0} |
+  | **0.05** | **0.5** | 0.7353 ± 0.000 | 5.7×10⁻⁷ | {0, 10, 0} |
+  | **0.05** | **1.0** | 0.7052 ± 0.000 | **0.00** | {10, 0, 0} |
+  | **0.05** | **2.0** | 0.7353 ± 0.000 | 5.7×10⁻⁷ | {0, 10, 0} |
+  | 0.20 | 0.5 | 0.7353 ± 0.000 | 5.7×10⁻⁷ | {0, 10, 0} |
+  | 0.20 | 1.0 | 0.7052 ± 0.000 | 0.00 | {10, 0, 0} |
+  | 0.20 | 2.0 | 0.7353 ± 0.000 | 5.7×10⁻⁷ | {0, 10, 0} |
+
+- **Interpretation (honest):**
+  - **PPO learns bang-bang policies at every grid cell** — either "always no-op" or "always partial." No cell produced a mixed / state-conditional policy. This is a known RL pathology in tiny discrete action spaces with sparse reward signal and only 800 training timesteps.
+  - **No cell chose "full retrain"** despite it being available. Under the sandbox's compute-cost model, partial's cost is ~370× smaller than full, so PPO correctly identified full as never worth it under these weights.
+  - **The transition boundary is around (w_gpu_hr=0.05, λ_sla=1.0)**: at exactly these weights, "always partial" and "always no-op" have nearly-equal expected reward, and PPO's Adam updates land on no-op. Move λ up or down at that same w_gpu_hr and PPO flips to partial. This is a sharp discrete boundary, not a smooth gradient — bang-bang, again.
+  - **No cell delivers a Pareto improvement over baselines.** The best RSO cell (always-partial, F1=0.735) still loses to the PSI+full baseline (F1=0.834) on F1 by a wide margin. RSO's cost is ~350× smaller than PSI+full baseline (5.7×10⁻⁷ vs 2.0×10⁻⁴ hr), which is a cost win, but not while matching F1.
+  - **The paper story that survives:** CADENCE's RSO delivers a *controllable* cost/F1 trade-off — the operator can dial (w_gpu_hr, λ_sla) to trade F1 for cost. Baselines have no such knob. This is a defensible product-story win, but does NOT close H2 as originally stated.
+
+- **What must change to properly test H2 (going into Phase 5):**
+  1. Longer PPO training (30k+ timesteps) so the policy has room to escape bang-bang.
+  2. Continuous or hybrid action space (fraction-of-layers to retrain) instead of Discrete(3).
+  3. Contested-SLA scenarios (W-24) where no-op is unambiguously suboptimal.
+  4. Augmented-Lagrangian dual updates (W-22, D-16) so λ adapts to actual SLA-violation rate.
+  5. Longer episodes with richer state (W-17 window size, more context features).
+
+- **Threats to validity:**
+  - Only 2 seeds × 2 scenarios per cell — too few to distinguish "bang-bang" from "high-variance-with-narrow-margin." A wider sweep (5 seeds × all 5 scenarios) is future work.
+  - 800 training timesteps is short; convergence to a suboptimal local optimum is likely.
+  - Sandbox retrain-cost approximation (D-16 fast sandbox) may be biased toward small-window retrains, which happen to be nearly free — so PPO systematically underestimates the true cost of frequent retrains.
+
