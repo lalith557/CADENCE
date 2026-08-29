@@ -265,28 +265,29 @@ Format per entry:
 
 ---
 
-### R-Gate-A-smoke: Step A pipeline smoke — all four fixes exercised end-to-end   (2026-08-29)
-- **Hypothesis / question:** Do the four Step A code changes (contested-SLA scenarios, EWC-in-sandbox, Augmented-Lagrangian dual-λ, enriched observation) all execute together without regression? This is a wiring gate, not the Gate A statistical gate — Gate A itself requires the 10-seed × 30k-timestep run listed in the Threats-to-validity section below.
+### R-Gate-A-smoke: Step A pipeline smoke — wiring proof (partial run, killed before summary)   (2026-08-29)
+- **Hypothesis / question:** Do the four Step A code changes (contested-SLA scenarios, EWC-in-sandbox, Augmented-Lagrangian dual-λ, enriched 15-d observation) execute together without regression? This is a *wiring* gate — Gate A itself (the H2 close-out) requires the ≥10-seed × ≥5-scenario × 30k-timestep run listed below.
 - **Setup:**
-  - `python -m benchmarks.phase_a_run --seeds 1 --train-timesteps 200 --n-windows 2 --window-size 1024 --sla 0.65 --contested-only`.
-  - 3 contested scenarios: `contested_v14_partial_recoverable`, `contested_multi_feature_full_needed`, `contested_v14_tail_flip_unrecoverable`.
-  - Dual-λ config: `lambda_init=1.0`, `dual_lr=5.0`, `target_violation=0.0`. EWC penalty=1000, Fisher sample=1000, cached.
-  - RTX 4070 Laptop, torch 2.11+cu128.
+  - Two smoke attempts. First: `--seeds 2 --train-timesteps 500 --n-windows 3 --window-size 1024 --sla 0.65 --contested-only`. Second: `--seeds 1 --train-timesteps 200 --n-windows 2 --window-size 1024 --sla 0.65 --contested-only`.
+  - Both were killed by the operator before the "Gate A results" summary table could print — end-to-end wall time was projected to exceed the working session budget once the paper-fidelity eval baselines (each retrain = 5-15 FraudNet epochs at ~1.5 s/epoch on RTX 4070) started running for every seed × scenario × baseline.
+  - Dual-λ config: `lambda_init=1.0`, `dual_lr=5.0`, `target_violation=0.0`. EWC penalty=1000, Fisher sample=1000, cached. RTX 4070 Laptop, torch 2.11+cu128, mlflow file store.
 - **Command to reproduce:**
   ```bash
   python -m benchmarks.phase_a_run --seeds 1 --train-timesteps 200 \
       --n-windows 2 --window-size 1024 --sla 0.65 --contested-only \
       --out experiments/phase_a_smoke.json
   ```
-- **Result (measured, wiring smoke — not the H2 gate):**
-  - `dual_update` events fire between episodes; λ climbed from 1.0 to 22.6 over the first ~40 episodes as violations accumulated, then oscillated as PPO started avoiding SLA-below states. This is the Augmented-Lagrangian working exactly as expected.
-  - PPO's action distribution during training included both `action_partial` (target_layer=layer1) and `action_full` — the sandbox is no longer stuck bang-bang on a single action, though 200 timesteps is too few to draw a policy conclusion.
-  - `fit_gpu_memory` logged max_allocated_mb≈163 MB inside every sandbox retrain, confirming §1b.4's "GPU actually used" check still holds under the Step A retrain path.
-  - EWC penalty was actually applied inside `_do_partial_retrain` — Fisher was computed once (cached), theta* snapshotted, and the penalty term added to the fine-tune loss. No NotImplementedError fallbacks logged.
-- **Statistical test:** N/A (wiring smoke).
-- **Interpretation:** The Step A plumbing is intact end-to-end. Every deliverable from Execution Plan §3 Step A that is *code* now executes together on GPU without regression. What remains is the Gate A *evidence* run — a full 10-seed × 5+-scenario × 30k-timestep sweep that will produce the paired Wilcoxon p-values needed to close H2. That run takes several hours of wall time on this laptop and is queued as its own R-entry.
+- **Measured evidence collected before kill (from log tails):**
+  - `phase_a_start`, `pretrain_done` (baseline_threshold=0.9999), `ppo_train_start` all fire — data loading + FraudNet pretraining on GPU + PPO env construction with EWC + Aug-Lagrangian wrapping succeed.
+  - `dual_update` events fired between episodes on the first attempt; λ climbed monotonically from `lambda_init=1.0` up to **22.6** across the first ~40 training episodes (log samples: `lambda_new=21.94, 22.17, 22.48, 22.63` at successive resets), then began oscillating in the [22, 23] band — Augmented-Lagrangian dual ascent behaving exactly as designed.
+  - PPO's action distribution during training included both `action_partial` (target_layer=layer1) **and** `action_full` — the sandbox is no longer stuck bang-bang on a single action. 500 timesteps is too few to draw a policy conclusion, but the mixing itself falsifies the R-4b "always partial OR always no-op" pathology within the first few hundred steps under the new reward.
+  - `fit_gpu_memory allocated_mb=65.1 max_allocated_mb=163.7 reserved_mb=242.0` recorded inside every FraudNet retrain — §1b.4's "GPU actually used" invariant still holds under the Step A retrain path.
+  - Fisher was computed once at the first partial-retrain event and cached; subsequent partials reused it without recompute (verified by absence of repeat `compute_fisher` log lines). The EWC penalty term was applied to the fine-tune loss without any `adapter_no_partial_fit_fallback_full` warnings.
+- **Statistical test:** N/A (wiring smoke — no summary table produced).
+- **Interpretation:** The Step A plumbing is intact end-to-end. Every code change from Execution Plan §3 Step A executes together on GPU without regression. What is missing is the Gate A *statistical* run — a full 10-seed × 5+-scenario × 30k-timestep sweep that produces paired Wilcoxon p-values on RSO vs baseline. That run is projected to take several hours of wall time on this laptop (dominated by eval-side paper-fidelity retrains, not training-side PPO steps) and is queued as its own follow-up R-entry.
 - **Threats to validity:**
-  - This entry is deliberately *not* the H2 gate. 1 seed × 200 timesteps × 2 windows tells you the code path works; it tells you nothing about which policy PPO would converge to at 30k timesteps.
-  - The three contested scenarios were calibrated by inspection, not by an exhaustive drift-severity sweep. If real F1 in a scenario lands substantially above or below the "just below SLA" band once run at n=15 windows, that scenario is not testing what it claims to test — the fix is to re-run `benchmarks.calibrate_contested` and adjust magnitudes.
-  - Augmented-Lagrangian dual-lr=5.0 was picked from prior-art (Chow et al. constrained-RL) without a per-project tune. If λ oscillates too aggressively in the full Gate A run, `--dual-lr 1.0` is the first knob to try.
-  - Contested-only mode skips the 5 default scenarios; the full Gate A includes them so the paired stats span >=5 scenarios per the plan's protocol.
+  - This entry is a wiring proof, not the H2 gate. It says the code path executes; it does *not* say what policy PPO would converge to at 30k timesteps, nor whether that policy would beat baselines.
+  - Because the smoke was killed before the summary printed, per-scenario F1/GPU-hr numbers aren't in this entry. The dual-λ and action-mixing observations above come from the streaming stderr log, not from the aggregated `experiments/phase_a_smoke.json` (that file was never written).
+  - The three contested scenarios were calibrated *by inspection* using `benchmarks.calibrate_contested`, not by an exhaustive drift-severity sweep. If real F1 lands substantially above or below the "just below SLA" band at the Gate A's n=15 windows setting, some scenarios may need magnitude re-tuning before the H2 verdict is meaningful.
+  - Augmented-Lagrangian `dual_lr=5.0` was picked from prior-art (Chow et al. constrained-RL) without a per-project tune. λ climbing to ~22 within 40 episodes is aggressive; if the full Gate A shows λ saturating at `lambda_max=100`, `--dual-lr 1.0` is the first knob to try.
+  - `--contested-only` skips the 5 default scenarios; the full Gate A must include them so the paired stats span ≥5 scenarios per the plan's protocol.
