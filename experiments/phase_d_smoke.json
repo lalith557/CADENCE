@@ -1,0 +1,55 @@
+{
+  "config": {
+    "config": "configs/default.yaml",
+    "seeds": 5,
+    "scenario": "amount_multiplicative_abrupt",
+    "window_size": 1024,
+    "n_windows": 2,
+    "sla": 0.65,
+    "disjoint_criterion": "high_amount",
+    "finetune_epochs": 2,
+    "fullretrain_epochs": 5,
+    "target_layer": "layer1",
+    "out": "experiments/phase_d_smoke.json"
+  },
+  "baseline_disjoint_f1": 0.5882352941176471,
+  "n_disjoint": 8268,
+  "disjoint_positive_rate": 0.00362844702467344,
+  "forgetting_partial": {
+    "mean": 0.3013145556451845,
+    "std": 0.0031980450622029226,
+    "values": [
+      0.2965686274509804,
+      0.3044515103338633,
+      0.3025210084033614,
+      0.29858012170385395,
+      0.3044515103338633
+    ]
+  },
+  "forgetting_full": {
+    "mean": -0.03462760598310468,
+    "std": 0.17992608047442948,
+    "values": [
+      0.24040920716112535,
+      -0.13903743315508021,
+      -0.196078431372549,
+      -0.196078431372549,
+      0.11764705882352944
+    ]
+  },
+  "post_partial_disjoint_f1": {
+    "mean": 0.28692073847246263,
+    "std": 0.0031980450622029226
+  },
+  "post_full_disjoint_f1": {
+    "mean": 0.6228629001007517,
+    "std": 0.17992608047442948
+  },
+  "rollback_partial": 0,
+  "rollback_full": 0,
+  "wilcoxon_partial_less_full": {
+    "stat": 15.0,
+    "p": 1.0,
+    "n_pairs": 5
+  }
+}

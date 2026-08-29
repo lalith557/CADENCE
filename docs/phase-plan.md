@@ -203,6 +203,50 @@ part of the pending full Gate A workstream.
 
 ---
 
+## Step D — Executor + all §4 fallbacks + H3 (Execution Plan §3, Claim C completion) ✅ CODE COMPLETE, H3 NEGATIVE ON FRAUD
+
+**Landed:**
+- `cadence.data.disjoint.make_disjoint_split` — fixes W-21. Three criteria
+  (`high_amount`, `late_time`, `class_positive`) that carve out a genuinely
+  disjoint sub-population from Credit Card Fraud. Disjoint rows are removed
+  from BOTH pretrain and stream so the model has zero exposure.
+- `cadence.executor.RetrainExecutor` — §4.1 shadow validation + §4.2 rollback
+  with (predicted, measured) feedback for the surrogate. Part-3B EWC path
+  (Fisher cache, theta*, replay buffer). Bubbles CUDA OOM through §4.7.
+- `cadence.executor.EscalationLadder` — §4.3 partial→full→human ladder +
+  §4.5 unrecoverable-drift guard (short-circuits after N consecutive
+  ladder failures).
+- `cadence.executor.fallbacks` — §4.4 diffuse-responsibility (Herfindahl<τ
+  → escalate partial to full), §4.6 false-alarm suppression (PSI fires
+  but delayed-label F1 ≥ SLA → no-op), §4.7 resource_fallback (wraps a
+  callable, catches CUDA OOM/timeout, raises ResourceFallbackError), §4.8
+  cold-start (missing traces → feature-only, missing everything → uniform).
+- `benchmarks.phase_d_run` — Gate D runner: for each seed, run partial and
+  full retrain on the drifted stream, measure forgetting on the disjoint
+  segment, paired Wilcoxon partial < full.
+- Tests: 21 for fallbacks + disjoint + escalation. All 75 project tests green.
+
+**Gate D (R-Gate-D, 2026-08-29):** H3 **NEGATIVE** on Credit Card Fraud.
+- `high_amount` disjoint (n=8,268): forget_partial = **+0.301**, forget_full =
+  **-0.035**. Full retrain *gains* 3 % on the disjoint tail; partial loses 30 %.
+  Wilcoxon partial<full: **p = 1.0**.
+- `late_time` disjoint (n=22,787): forget_partial = **-0.016**, forget_full =
+  **-0.028**. Wilcoxon p = 0.97.
+- `class_positive` degenerates (baseline F1 = 0 because pretrain never sees fraud).
+
+Root cause: Fraud is a **single-task** benchmark. EWC on Layer 1 has to
+choose between preserving pre-drift Fisher information (helps generalization)
+or adapting to drift (helps retrain window F1) — it cannot do both, and the
+current λ_ewc = 1000 chose adaptation. The real H3 test needs a multi-task
+setup (Split-MNIST via Avalanche) — that's Step F.
+
+The executor code, all 8 §4 fallbacks, shadow/rollback, and the disjoint-
+split infrastructure are in-tree and tested. The negative H3 finding is
+recorded in `docs/results.md` per the plan's guardrail: "report negative
+results honestly."
+
+---
+
 ## Phase 4 — Counterfactual surrogate (Claim B, narrow)
 
 **Deliverables:**

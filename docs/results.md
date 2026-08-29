@@ -374,3 +374,43 @@ Format per entry:
   - The intervention sandbox uses `finetune_epochs=1` in this smoke to keep the 90-triple generation under a minute. Real Gate C evidence for the paper should use `finetune_epochs=3-5` so the measured post-fix F1 reflects fully-converged partial retrains.
   - `causallearn` PC still falls back to a dense skeleton on the 2-window inputs (`pc_failed_fallback_dense`) — inherited from Step B, not introduced here.
   - Episode calibration MAE = 0.566 is dominated by the surrogate's mis-calibration on an *unrecoverable* scenario. If you re-ran the closed-loop episode on `amount_multiplicative_gradual` (which is recoverable), the episode MAE lands around 0.02 (as observed on a preceding smoke run). Both numbers matter; both belong in the paper as they represent different regimes.
+
+---
+
+### R-Gate-D: H3 forgetting on disjoint segment — full retrain preserves better than partial (NEGATIVE)   (2026-08-29)
+- **Hypothesis / question:** H3 — a Part-3B EWC-regularized partial retrain shows *less* forgetting on a genuinely disjoint sub-population than a naive full retrain, at ≥10 seeds, paired Wilcoxon p<0.05.
+- **Setup:**
+  - W-21 fix: the "unrelated" segment is now a genuinely disjoint sub-population defined by `cadence.data.disjoint.make_disjoint_split`. Three criteria tested: `high_amount` (Amount z-score > 1.5), `late_time` (top 10 % of Time), `class_positive` (all fraud rows). The disjoint rows are removed from both the pretraining set and the drifted-stream slice, so the pretrained model has zero exposure to them.
+  - 5 seeds × 1 scenario (`amount_multiplicative_abrupt`), `window_size=1024`, `n_windows=2`, `finetune_epochs=2`, `fullretrain_epochs=5`.
+  - Partial retrain uses the new `RetrainExecutor` with EWC on Layer 1 (Fisher weighted, Part-3B mechanics). Full retrain uses the same executor with `action="full"`.
+  - Baseline disjoint F1 measured before either retrain — this is the "if we did nothing" score to compare forgetting against.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase_d_run --seeds 5 --scenario amount_multiplicative_abrupt \
+      --window-size 1024 --n-windows 2 --sla 0.65 \
+      --finetune-epochs 2 --fullretrain-epochs 5 \
+      --disjoint-criterion high_amount --out experiments/phase_d_smoke.json
+  ```
+- **Result (three disjoint criteria):**
+
+  | criterion         | n_disjoint | baseline_F1 | forget_partial | forget_full | Wilcoxon p (partial<full) |
+  |-------------------|-----------:|------------:|---------------:|------------:|--------------------------:|
+  | `high_amount`     |      8,268 |       0.588 |    **+0.301**  |   **-0.035**|                     1.000 |
+  | `late_time`       |     22,787 |       0.737 |    **-0.016**  |   **-0.028**|                     0.969 |
+  | `class_positive`  |        394 |       0.000 |    +0.000      |    +0.000   |                     1.000 |
+
+  Full retrain preserves disjoint-segment F1 *better* than EWC-partial on both non-degenerate criteria. On `high_amount` the partial retrain destroys 30 % of the disjoint F1 while the full retrain slightly *improves* it (-0.03 forgetting = 3 % gain). No rollbacks on `high_amount`/`late_time`; 5/5 rollbacks on `class_positive` because pretrain never sees fraud.
+
+- **Statistical test:** paired Wilcoxon signed-rank, alternative='less', 5 paired seeds. p ≥ 0.97 on every criterion. H3 as originally framed is **NOT supported** on Credit Card Fraud.
+- **Interpretation (honest — this is a negative result):** The naive full retrain preserves the disjoint sub-populations *better* than the EWC-regularized partial retrain. Two reasons:
+    1. Credit Card Fraud is a **single-task** benchmark. The "disjoint sub-populations" here are still drawn from the same conditional `P(y | x)` — a full retrain that sees more data generalizes to the tail; EWC's Fisher penalty protects only the pre-drift weights on the pre-drift data distribution, which is not the disjoint tail.
+    2. Layer 1 is exactly what the drift shift touches. EWC's Fisher on Layer 1 has to pick sides — protect old feature-response patterns (helps disjoint but hurts adaptation to drift) or allow adaptation (helps drift F1 but hurts disjoint). It cannot do both, and the current `ewc_penalty=1000.0` chose to allow adaptation.
+
+    The reference's forgetting expectation (Q40, §3 R-4b) implicitly assumed a genuinely **multi-task** setting — e.g., Split-MNIST via Avalanche, where task-1 samples are literally never seen while task-2 is trained. That's the Step F work, not this dataset. On a single-task benchmark like Fraud, H3 requires either (a) a different disjoint-segment definition that IS genuinely a different task, or (b) a much higher EWC penalty that trades adaptation for preservation. Both are honest follow-ups.
+
+- **Threats to validity:**
+  - Only 5 seeds. A wider sweep (≥10 seeds) is needed for the paper, but the effect size (partial forgetting ≈ 0.30, full forgetting ≈ -0.03) makes it very unlikely more seeds change the sign.
+  - `ewc_penalty=1000.0` is inherited from `configs/default.yaml` D-8 — not tuned per-scenario. A λ_ewc sweep might find a knee where partial preserves the disjoint segment at the cost of dropping mainline F1 further.
+  - `finetune_epochs=2, fullretrain_epochs=5` — full retrain has more optimizer steps and more data (historical + retrain) than partial. Equalizing wall-clock instead of epochs would be a fairer H3 test.
+  - The disjoint criterion is defined on raw feature-space statistics, not on the model's decision boundary. A "genuinely disjoint task" criterion (e.g., "fraud from merchants FraudNet has never seen") would be a stronger test but requires merchant IDs that this dataset doesn't ship with.
+  - This entry does **not** invalidate the Part-3B executor itself — the executor code, all 8 §4 fallbacks, shadow/canary/rollback, and the disjoint-split infrastructure are in-tree and tested (21 fallback tests green in `tests/unit/test_fallbacks.py`). What it invalidates is the *H3 hypothesis on this specific dataset*. The MNIST/Avalanche path (Step F) is where H3 gets its real test.

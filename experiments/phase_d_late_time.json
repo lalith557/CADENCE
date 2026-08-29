@@ -1,0 +1,55 @@
+{
+  "config": {
+    "config": "configs/default.yaml",
+    "seeds": 5,
+    "scenario": "amount_multiplicative_abrupt",
+    "window_size": 1024,
+    "n_windows": 2,
+    "sla": 0.65,
+    "disjoint_criterion": "late_time",
+    "finetune_epochs": 2,
+    "fullretrain_epochs": 5,
+    "target_layer": "layer1",
+    "out": "experiments/phase_d_late_time.json"
+  },
+  "baseline_disjoint_f1": 0.7368421052631579,
+  "n_disjoint": 22787,
+  "disjoint_positive_rate": 0.0009215780927721947,
+  "forgetting_partial": {
+    "mean": -0.015931721194879157,
+    "std": 0.007965860597439579,
+    "values": [
+      -0.019914651493598945,
+      0.0,
+      -0.019914651493598945,
+      -0.019914651493598945,
+      -0.019914651493598945
+    ]
+  },
+  "forgetting_full": {
+    "mean": -0.028542510121457566,
+    "std": 0.007692307692307709,
+    "values": [
+      -0.03238866396761142,
+      -0.03238866396761142,
+      -0.03238866396761142,
+      -0.03238866396761142,
+      -0.013157894736842146
+    ]
+  },
+  "post_partial_disjoint_f1": {
+    "mean": 0.752773826458037,
+    "std": 0.007965860597439579
+  },
+  "post_full_disjoint_f1": {
+    "mean": 0.7653846153846154,
+    "std": 0.007692307692307709
+  },
+  "rollback_partial": 0,
+  "rollback_full": 0,
+  "wilcoxon_partial_less_full": {
+    "stat": 14.0,
+    "p": 0.96875,
+    "n_pairs": 5
+  }
+}

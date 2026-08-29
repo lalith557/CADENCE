@@ -1,0 +1,55 @@
+{
+  "config": {
+    "config": "configs/default.yaml",
+    "seeds": 5,
+    "scenario": "amount_multiplicative_abrupt",
+    "window_size": 1024,
+    "n_windows": 2,
+    "sla": 0.65,
+    "disjoint_criterion": "class_positive",
+    "finetune_epochs": 2,
+    "fullretrain_epochs": 5,
+    "target_layer": "layer1",
+    "out": "experiments/phase_d_class.json"
+  },
+  "baseline_disjoint_f1": 0.0,
+  "n_disjoint": 394,
+  "disjoint_positive_rate": 1.0,
+  "forgetting_partial": {
+    "mean": 0.0,
+    "std": 0.0,
+    "values": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "forgetting_full": {
+    "mean": 0.0,
+    "std": 0.0,
+    "values": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "post_partial_disjoint_f1": {
+    "mean": 0.0,
+    "std": 0.0
+  },
+  "post_full_disjoint_f1": {
+    "mean": 0.0,
+    "std": 0.0
+  },
+  "rollback_partial": 5,
+  "rollback_full": 5,
+  "wilcoxon_partial_less_full": {
+    "stat": 0.0,
+    "p": 1.0,
+    "n_pairs": 5
+  }
+}
