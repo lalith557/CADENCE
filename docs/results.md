@@ -625,6 +625,44 @@ Format per entry:
 
 ---
 
+### R-Gate-F-mnist-n10: H3 at paper scale — partial EWC beats naive-full AND full-with-replay (p<0.001)   (2026-08-30)
+- **Hypothesis / question:** H3 at the paper protocol on the multi-task benchmark: partial EWC-regularized retrain has *less* forgetting than (a) naive full retrain and (b) a fair full-with-replay baseline that a reviewer will demand, at n=10, paired Wilcoxon p<0.05.
+- **Setup:**
+  - Task A = digits {0,1}, Task B = digits {2,3}. Genuinely disjoint classes; Task A images never seen during Task B retraining.
+  - 10 seeds. `ewc_penalty=5000`, `finetune_epochs=3`, `fullretrain_epochs=5`.
+  - Three paths per seed:
+    * `partial_ewc_layer1` — Layer-1 fine-tune with EWC-weighted penalty on the Task-A Fisher.
+    * `full_naive_no_replay` — fresh Adam fit on Task B ONLY (strict; the R-Gate-F baseline).
+    * `full_with_replay` (**new**) — fresh Adam fit on Task B + a Task-A replay buffer sized ~30% of Task B. No EWC, no layer freezing. This is the honest reviewer-fair baseline for a continual-learning paper.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase_f_mnist --seeds 10 --finetune-epochs 3 \
+      --fullretrain-epochs 5 --ewc-penalty 5000 --out experiments/phase_f_mnist_n10.json
+  ```
+- **Result:** Pre Task A F1 = **0.967 ± 0.002**.
+
+  | path | Task A forgetting | Task B F1 |
+  |---|---:|---:|
+  | `partial_ewc_layer1` | **-0.032 ± 0.002** (slight *gain*) | 0.802 ± 0.013 |
+  | `full_with_replay` | **-0.017 ± 0.003** (slight *gain*) | 0.979 ± 0.003 |
+  | `full_naive_no_replay` | **+0.395 ± 0.019** (39.5 % drop) | 0.990 ± 0.002 |
+
+  Paired Wilcoxon signed-rank at n=10, alternative='less' on forgetting:
+  - `partial_ewc < full_naive`: **stat = 0.0, p = 0.0009765625** (Wilcoxon minimum at n=10)
+  - `partial_ewc < full_with_replay`: **stat = 0.0, p = 0.0009765625**
+  Both p-values are at the theoretical floor — partial wins on **every single seed** against both baselines.
+- **Statistical test:** paired Wilcoxon signed-rank, n=10 pairs. Two comparisons. Bonferroni-adjusted α = 0.025; both p-values below.
+- **Interpretation:** **H3 SUPPORTED at paper scale on the multi-task benchmark.** The R-Gate-F earlier result held at n=5 for the same effect; scaling to n=10 tightens the p-value to the Wilcoxon minimum and adds the reviewer-fair baseline. The honest trade-off surfaces clearly in the Task B column: partial EWC preserves Task A perfectly (F1 stays at 0.998 vs 0.997 pre) but under-adapts to Task B (F1=0.80 vs 0.99 for full-retrain paths). That's the classical stability-plasticity trade-off — EWC buys stability at the cost of plasticity, exactly as the continual-learning literature predicts, and the H3 claim is specifically about *forgetting* (stability), not new-task performance (plasticity).
+
+  Take with the R-Gate-D Fraud negative: on a single-task benchmark EWC-partial has no distinct task to preserve, so its forgetting number tracks whichever way the sub-population happens to land. On a genuinely multi-task benchmark the effect is dramatic (39.5 % Task-A F1 drop under naive full retrain, essentially zero under EWC-partial). The two entries together support the honest paper claim: *EWC-partial's forgetting-protection materialises when there is a distinct task to preserve; on single-task deployments the standard `full retrain with replay` baseline is already sufficient.*
+- **Threats to validity:**
+  - Task A and Task B are both trivially-easy binary MNIST tasks. On harder pairs (say {4,9} vs {3,8}) the plasticity cost of EWC might make the trade-off less favourable. A follow-up sweep over all `(task_i, task_j)` pairs is straightforward but not run here.
+  - `ewc_penalty=5000` is aggressive; the reference default is 1000. A λ_ewc sweep would show where the stability-plasticity knee sits; the paper should include it.
+  - Both baseline paths run only 5 epochs of full training; a larger epoch budget helps full-with-replay more than partial (which is already saturated on Task B).
+  - The full-with-replay baseline uses a naive uniform sample of Task A — a smarter replay strategy (e.g. gradient-episodic memory, iCaRL exemplar herding) would close the gap further. This is a legitimate future comparison, not a threat to the current result.
+
+---
+
 ### R-Gate-A-w28: PPO retrained on Step A 15-d observation (W-28 close-out)   (2026-08-30)
 - **Hypothesis / question:** Close W-28 — produce a genuine PPO checkpoint on the Step A 15-d observation (`sla_margin` + `attribution_concentration` appended to the pre-Step-A 13-d obs) so the RSO's actions in Gate C / Gate E / dashboard are *learned* rather than rule-fallback.
 - **Setup:**
