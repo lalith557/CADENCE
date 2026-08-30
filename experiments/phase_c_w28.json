@@ -1,0 +1,70 @@
+{
+  "config": {
+    "config": "configs/default.yaml",
+    "n_drifts": 15,
+    "candidates_per_drift": 2,
+    "finetune_epochs": 1,
+    "sandbox_window_size": 512,
+    "sandbox_windows_per_sample": 2,
+    "joint_epochs": 8,
+    "joint_lr": 0.003,
+    "eval_scenario": "amount_multiplicative_gradual",
+    "eval_windows": 3,
+    "window_size": 1024,
+    "sla": 0.65,
+    "ppo_checkpoint": "experiments/rso_ppo_phase_a.zip",
+    "out": "experiments/phase_c_w28.json"
+  },
+  "baseline_f1": 0.7142857142857143,
+  "baseline_threshold": 0.9999,
+  "n_intervention_triples": 30,
+  "joint_train": {
+    "final_val_mse": 0.017812491654088564,
+    "final_val_mae": 0.07551374521130831,
+    "final_val_r2": 0.45763185220056657,
+    "wall_s": 1.344757099999697,
+    "max_vram_mb": 65.229,
+    "val_preds": [
+      0.8024543523788452,
+      0.6296775937080383,
+      0.7826125621795654,
+      0.8102582097053528,
+      0.7251787781715393,
+      0.7677908539772034
+    ],
+    "val_targets": [
+      0.8,
+      0.3137254901960784,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  "episode": {
+    "action_counts": {
+      "0": 0,
+      "1": 0,
+      "2": 1
+    },
+    "calibration_mae": 0.031638932228088334,
+    "calibration_r2": -1001022031.5335666,
+    "rows": [
+      {
+        "step": 0,
+        "action": 2,
+        "top_feature": 29,
+        "pre_f1": 0.8,
+        "predicted_post_f1": 0.8316389322280884,
+        "measured_post_f1": 0.8,
+        "cost_gpu_hr": 1.3701664532650449e-06,
+        "cost_kg_co2": 4.679255454545454e-08
+      }
+    ]
+  },
+  "gpu_memory_end": {
+    "allocated": 68551168,
+    "max_allocated": 171721216,
+    "reserved": 253755392
+  }
+}

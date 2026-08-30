@@ -104,6 +104,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ewc-penalty", type=float, default=1000.0)
     p.add_argument("--contested-only", action="store_true",
                    help="Restrict eval to just the 3 contested-SLA scenarios.")
+    p.add_argument("--train-only", action="store_true",
+                   help="Train PPO + save checkpoint, then skip the (expensive) eval loop. "
+                        "Used to close W-28 without waiting for paper-fidelity baselines.")
     p.add_argument("--out", default="experiments/phase_a_summary.json")
     args = p.parse_args(argv)
 
@@ -228,6 +231,24 @@ def main(argv: list[str] | None = None) -> int:
             check_env_first=False,
         )
         log.info("ppo_ready")
+
+        if args.train_only:
+            # W-28 close-out: we just need a 15-d obs checkpoint on disk.
+            train_only_summary = {
+                "phase": "A/train_only",
+                "train_timesteps": args.train_timesteps,
+                "seeds": args.seeds,
+                "n_scenarios": len(eval_scenarios),
+                "checkpoint_path": str(Path("experiments") / "rso_ppo_phase_a.zip"),
+                "final_lambda": None,
+            }
+            Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+            with open(args.out, "w", encoding="utf-8") as f:
+                json.dump(train_only_summary, f, indent=2, default=str)
+            print("\n=== Gate A (train-only) ===")
+            print(f"PPO checkpoint saved to: {train_only_summary['checkpoint_path']}")
+            print(f"Trained {args.train_timesteps} timesteps on {len(eval_scenarios)} scenarios.")
+            return 0
 
         run_cfg = BaselineRunConfig(
             window_size=args.window_size,

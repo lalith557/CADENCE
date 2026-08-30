@@ -622,3 +622,35 @@ Format per entry:
   - Compose *syntax* passes; nothing verified that the built images actually launch (e.g., `mlflow server` inside the container could still fail on the mounted `experiments/mlruns/` if the file-store URI has permission issues).
   - The dashboard's imports resolve on Windows Python 3.13; the container image is Python 3.10-slim-bookworm. Small Python-version deltas (walrus operators, `Self` type, etc.) that pass 3.13 could fail 3.10 — untested here.
   - The `api` service is still commented out; no REST scoring endpoint ships. Product docs correctly flag this in the "honest open gaps" list.
+
+---
+
+### R-Gate-A-w28: PPO retrained on Step A 15-d observation (W-28 close-out)   (2026-08-30)
+- **Hypothesis / question:** Close W-28 — produce a genuine PPO checkpoint on the Step A 15-d observation (`sla_margin` + `attribution_concentration` appended to the pre-Step-A 13-d obs) so the RSO's actions in Gate C / Gate E / dashboard are *learned* rather than rule-fallback.
+- **Setup:**
+  - Added `--train-only` flag to `benchmarks/phase_a_run.py` so we can train + save the PPO checkpoint without the paper-fidelity eval loop (which is what made prior Gate A runs bust the session budget).
+  - 1 seed, 800 PPO timesteps, 3 contested-SLA scenarios, `AugmentedLagrangianEnv` wrapper, EWC-in-sandbox partial retrain, 5 windows/episode × 1024 rows.
+  - RTX 4070 Laptop, torch 2.11+cu128.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase_a_run --seeds 1 --train-timesteps 800 \
+      --n-windows 5 --window-size 1024 --sla 0.65 \
+      --contested-only --train-only --out experiments/phase_a_w28.json
+  ```
+- **Result:**
+  - PPO training: **9,962 s wall-clock (~2.75 h)** on the RTX 4070 Laptop. Most of that time is inside the fast sandbox's `_do_partial_retrain` calls; PPO's own gradient work is a fraction of it.
+  - Dual-λ trajectory during training: init 1.0 → **final 87.2** (near the `lambda_max=100` cap). Confirms the Augmented-Lagrangian dual-ascent from Step A is doing real work — the SLA violation signal on the contested scenarios pushed λ hard.
+  - Checkpoint saved to `experiments/rso_ppo_phase_a.zip` (156 605 bytes).
+  - Immediately re-loaded into `benchmarks/phase_c_run` with `--ppo-checkpoint experiments/rso_ppo_phase_a.zip`. This time the load succeeded (obs-dim 15 == env-dim 15, no `ppo_obs_dim_mismatch_using_rule` warning). Sample closed-loop step:
+      * `action=2 (full)` chosen by the learned PPO — not the rule fallback.
+      * pre_f1 = 0.800, predicted_post = 0.832, measured_post = 0.800, cost 1e-6 GPU-hr.
+      * Episode terminated after step 0 because pre_f1 already met SLA=0.65.
+- **Statistical test:** N/A (checkpoint-existence gate).
+- **Interpretation:** **W-28 closed.** A learned 15-d PPO now drives the RSO wherever the executor loop asks for an action; the previous rule fallback is a real safety net, not a load-bearing default. Gate C, Gate E, and the Streamlit dashboard's decision panel are all upgradeable to the learned policy by passing `--ppo-checkpoint experiments/rso_ppo_phase_a.zip`.
+
+  What is **not** closed: the 800-timestep run at 1 seed does not carry the statistical weight the plan's Gate A protocol calls for (10 seeds × 30 k timesteps × ≥5 scenarios × paired Wilcoxon). This entry gives the *engineering* close-out on W-28 (the checkpoint plumbing works end-to-end). The *research* close-out — showing this 15-d-trained PPO actually beats the baselines on cost at equal/better F1 — is still pending a paper-grade multi-seed sweep, which is a multi-day job outside a single session budget.
+- **Threats to validity:**
+  - 1 seed × 800 timesteps × 3 scenarios. Enough for the checkpoint-load smoke, not enough for a Pareto claim.
+  - `--contested-only` restricts training to the 3 hard scenarios where SLA is contested. A production RSO should be trained on `build_step_a_scenarios` (5 default + 3 contested = 8 scenarios) so it doesn't overfit the reward to the tail. Deferred to the full Gate A run.
+  - λ climbing to 87.2 (near `lambda_max=100`) is aggressive; on the contested scenarios that's the correct signal, but re-training with a lower `dual_lr` (say 1.0 instead of 5.0) would give a smoother trajectory and probably better sample efficiency.
+  - `phase_c_run` above ran with `--eval-windows 3` and terminated at step 0 because the drift wasn't severe enough to push pre_f1 below SLA=0.65. Rerun with `--eval-scenario contested_v14_partial_recoverable --sla 0.80` to actually stress the learned policy across multiple windows.

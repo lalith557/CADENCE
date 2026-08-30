@@ -22,6 +22,7 @@ exact `experiments/*.json` artifact that produced its numbers.
 - [Gate-G: Product surface + paper skeleton + adversarial audit refresh](#r-gate-g)
 - [Gate-F-text: Vocabulary drift on Yelp reviews — text adapter through the CADENCE loop (W-29 fix)](#r-gate-f-text)
 - [Gate-G-clean-clone: docker-compose config validated, images not booted (W-31 partial)](#r-gate-g-clean-clone)
+- [Gate-A-w28: PPO retrained on Step A 15-d observation (W-28 close-out)](#r-gate-a-w28)
 
 ## Result tables (one section per R-entry)
 
@@ -148,6 +149,9 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 
 _No tables extracted — see the raw entry in `docs/results.md`._
 
+**Artifacts referenced.**
+- `experiments/phase_a_smoke.json`
+
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
 ---
@@ -164,6 +168,9 @@ _No tables extracted — see the raw entry in `docs/results.md`._
   | psi_stub        | 0.333 ± 0.471     | 0.333 ± 0.471     | 0.398 ± 0.426     | 0.782 ± 0.160     |
   | cdag_structural | 0.000 ± 0.000     | 0.000 ± 0.000     | 0.157 ± 0.080     | 0.705 ± 0.227     |
   | **gnn_learned** | **0.556 ± 0.497** | **0.556 ± 0.497** | **0.633 ± 0.410** | **0.927 ± 0.082** |
+
+**Artifacts referenced.**
+- `experiments/phase_b_smoke2.json`
 
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
@@ -183,6 +190,9 @@ _No tables extracted — see the raw entry in `docs/results.md`._
     | 2 | full | 28 | 0.0179 | 0.5899 | 0.0186 | 1e-6 |
     | 3 | full | 23 | 0.0186 | 0.5858 | 0.0410 | 1e-6 |
 
+**Artifacts referenced.**
+- `experiments/phase_c_smoke2.json`
+
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
 ---
@@ -197,6 +207,9 @@ _No tables extracted — see the raw entry in `docs/results.md`._
   | `high_amount`     |      8,268 |       0.588 |    **+0.301**  |   **-0.035**|                     1.000 |
   | `late_time`       |     22,787 |       0.737 |    **-0.016**  |   **-0.028**|                     0.969 |
   | `class_positive`  |        394 |       0.000 |    +0.000      |    +0.000   |                     1.000 |
+
+**Artifacts referenced.**
+- `experiments/phase_d_smoke.json`
 
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
@@ -218,6 +231,10 @@ _No tables extracted — see the raw entry in `docs/results.md`._
   | `cadence_rule` | 0.561 ± 0.000  | 0.536         | 1.55× vs periodic | {0.0, 3.0, 3.0}          |
   | `periodic`     | 0.561 ± 0.000  | 0.536         | 1.00× (base)      | {8.0, 0.0, 2.0}          |
   | `reactive_full`| 0.561 ± 0.000  | 0.536         | **0** — PSI never fires | {10.0, 0.0, 0.0}         |
+
+**Artifacts referenced.**
+- `experiments/phase_e_elec2.json`
+- `experiments/phase_e_airlines.json`
 
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
@@ -250,6 +267,11 @@ _No tables extracted — see the raw entry in `docs/results.md`._
   | GNN AUROC @ 0.3 edge drop                         | 0.908 ± 0.162 |
   | GNN AUROC @ 0.5 edge drop                         | 0.903 ± 0.156 |
 
+**Artifacts referenced.**
+- `experiments/phase_f_tree.json`
+- `experiments/phase_f_mnist.json`
+- `experiments/phase_f_robustness.json`
+
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
 ---
@@ -276,6 +298,9 @@ _No tables extracted — see the raw entry in `docs/results.md`._
   | `periodic`     | 0.9671 ± 0.000 | {4, 0, 2}                |         0 |
   | `reactive_full`| 0.9640 ± 0.000 | {6, 0, 0}                |         0 |
 
+**Artifacts referenced.**
+- `experiments/phase_f_text.json`
+
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
 ---
@@ -286,6 +311,20 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Setup.** - `docker --version` → **29.6.2**; `docker compose version` → **v5.3.1**. - `docker info` → **daemon not running** (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) on this box. Docker Desktop is installed but not started. - `dashboard/app.py` — `python -m py_compile dashboard/app.py` exit 0.
 
 _No tables extracted — see the raw entry in `docs/results.md`._
+
+**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+
+---
+
+### R-Gate-A-w28: PPO retrained on Step A 15-d observation (W-28 close-out)
+*Recorded: 2026-08-30*
+
+**Setup.** - Added `--train-only` flag to `benchmarks/phase_a_run.py` so we can train + save the PPO checkpoint without the paper-fidelity eval loop (which is what made prior Gate A runs bust the session budget). - 1 seed, 800 PPO timesteps, 3 contested-SLA scenarios, `AugmentedLagrangianEnv` wrapper, EWC-in-sandbox partial retrain, 5 windows/episode × 1024 rows. - RTX 4070 Laptop, torch 2.11+cu128.
+
+_No tables extracted — see the raw entry in `docs/results.md`._
+
+**Artifacts referenced.**
+- `experiments/phase_a_w28.json`
 
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 

@@ -53,8 +53,21 @@ def _extract_sections(text: str) -> list[dict]:
             "interpretation": _first_bullet(body, "Interpretation"),
             "wilcoxon_p": _extract_p_value(body),
             "tables": _extract_tables(body),
+            "artifacts": _extract_artifacts(body),
         })
     return entries
+
+
+def _extract_artifacts(body: str) -> list[str]:
+    """Every `experiments/*.json` path mentioned in the entry body."""
+    matches = re.findall(r"experiments/[A-Za-z0-9_./-]+\.json", body)
+    unique: list[str] = []
+    seen: set[str] = set()
+    for m in matches:
+        if m not in seen:
+            seen.add(m)
+            unique.append(m)
+    return unique
 
 
 def _first_bullet(body: str, header: str) -> str:
@@ -151,6 +164,11 @@ def _render(entries: list[dict], src_path: Path) -> str:
             lines.append("")
         if e["interpretation"]:
             lines.append(f"**Interpretation.** {e['interpretation']}")
+            lines.append("")
+        if e["artifacts"]:
+            lines.append("**Artifacts referenced.**")
+            for a in e["artifacts"]:
+                lines.append(f"- `{a}`")
             lines.append("")
         lines.append("**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._")
         lines.append("")

@@ -1,4 +1,4 @@
-.PHONY: help setup setup-ml setup-all test test-fast lint format typecheck clean smoke reproduce datasets-check
+.PHONY: help setup setup-ml setup-all test test-fast lint format typecheck clean smoke reproduce datasets-check gpu-check paper-skeleton dashboard docker-check
 
 PYTHON ?= python
 PIP    ?= pip
@@ -52,6 +52,19 @@ datasets-check:
 
 reproduce:
 	@echo "Phase-by-phase reproduce pipeline lands as phases complete. See docs/results.md."
+
+gpu-check:
+	cadence gpu-check
+
+paper-skeleton:
+	$(PYTHON) -m scripts.build_paper_skeleton
+	@echo "wrote docs/paper/skeleton.md — commit if you want the appendix in sync"
+
+dashboard:
+	streamlit run dashboard/app.py
+
+docker-check:
+	docker-compose config --quiet && echo "docker-compose config OK"
 
 clean:
 	rm -rf build dist *.egg-info .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage

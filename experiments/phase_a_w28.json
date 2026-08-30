@@ -1,0 +1,8 @@
+{
+  "phase": "A/train_only",
+  "train_timesteps": 800,
+  "seeds": 1,
+  "n_scenarios": 3,
+  "checkpoint_path": "experiments\\rso_ppo_phase_a.zip",
+  "final_lambda": null
+}
