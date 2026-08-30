@@ -6,11 +6,15 @@ CADENCE watches deployed ML models, tells you **which upstream factor caused a p
 
 The full research proposal, walkthrough example, and dataset reference live in [`CADENCE-master-reference.md`](CADENCE-master-reference.md). Living documents track the actual build:
 
+- [`docs/STATUS.md`](docs/STATUS.md) — **honest end-of-project ledger**; start here
 - [`docs/decisions.md`](docs/decisions.md) — every real design choice, with reasoning + alternatives
 - [`docs/tech.md`](docs/tech.md) — stack rationale
+- [`docs/prior_art.md`](docs/prior_art.md) — related-work notes per claim
 - [`docs/results.md`](docs/results.md) — measured experiment results (no fabrications)
 - [`docs/weaknesses.md`](docs/weaknesses.md) — self-audit register
 - [`docs/product.md`](docs/product.md) — one-page launchability pitch
+- [`docs/paper/abstract.md`](docs/paper/abstract.md) — draft abstract + method skeleton
+- [`docs/paper/skeleton.md`](docs/paper/skeleton.md) — auto-generated results appendix
 
 ---
 
@@ -44,8 +48,10 @@ Four trained ML components: **FraudNet** (or user-supplied model), **CDAG-GNN**,
 
 ## Quickstart (5 minutes)
 
+Verified on a clean Python 3.13 venv on 2026-08-30 — see `docs/STATUS.md`.
+
 ```bash
-# 1. Set up a Python 3.10 virtualenv
+# 1. Set up a Python 3.10-3.13 virtualenv
 python -m venv .venv
 source .venv/bin/activate   # or: .venv\Scripts\activate  on Windows
 
@@ -57,6 +63,22 @@ pytest -m "not needs_dataset and not gpu and not slow"
 
 # 4. Smoke-check the pipeline: config → seeds → MLflow round-trip
 cadence smoke -c configs/ci.yaml
+
+# 5. Prove GPU is really used (matmul + peak VRAM report)
+cadence gpu-check
+```
+
+Product surface:
+
+```bash
+# Dashboard: real CDAG + real responsibility from experiments/*.json
+streamlit run dashboard/app.py
+
+# REST API: /health /score /monitor /decide /admin/reload
+uvicorn cadence.api.server:app --port 8000
+
+# Or the whole stack under compose (needs a live Docker daemon)
+docker compose up --build dashboard mlflow
 ```
 
 To enable the full ML stack (Phase 1+):

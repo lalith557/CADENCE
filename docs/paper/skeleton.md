@@ -22,6 +22,8 @@ exact `experiments/*.json` artifact that produced its numbers.
 - [Gate-G: Product surface + paper skeleton + adversarial audit refresh](#r-gate-g)
 - [Gate-F-text: Vocabulary drift on Yelp reviews — text adapter through the CADENCE loop (W-29 fix)](#r-gate-f-text)
 - [Gate-G-clean-clone: docker-compose config validated, images not booted (W-31 partial)](#r-gate-g-clean-clone)
+- [Gate-F-tree-sla045: LightGBM on GMSC at real SLA=0.45 — CADENCE genuinely acts, sits on the Pareto frontier](#r-gate-f-tree-sla045)
+- [Gate-F-text-domain: real Yelp vocabulary drift via 1★/5★ → 2★/4★ domain shift (W-29 followup)](#r-gate-f-text-domain)
 - [Gate-F-mnist-n10: H3 at paper scale — partial EWC beats naive-full AND full-with-replay (p<0.001)](#r-gate-f-mnist-n10)
 - [Gate-A-w28: PPO retrained on Step A 15-d observation (W-28 close-out)](#r-gate-a-w28)
 
@@ -312,6 +314,38 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Setup.** - `docker --version` → **29.6.2**; `docker compose version` → **v5.3.1**. - `docker info` → **daemon not running** (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) on this box. Docker Desktop is installed but not started. - `dashboard/app.py` — `python -m py_compile dashboard/app.py` exit 0.
 
 _No tables extracted — see the raw entry in `docs/results.md`._
+
+**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+
+---
+
+### R-Gate-F-tree-sla045: LightGBM on GMSC at real SLA=0.45 — CADENCE genuinely acts, sits on the Pareto frontier
+*Recorded: 2026-08-30*
+
+**Setup.** - Same LightGBM (`n_estimators=100, num_leaves=31`) as R-Gate-F on GMSC. - Injected `gmsc_debt_ratio_x2` drift (DebtRatio × 2). - **`--sla 0.45`** so CADENCE has real skin in the game. - 5 seeds × 6 windows × 1024 rows/window, `periodic_period=3`.
+
+| strategy | mean F1 | actions {no, part, full} | rollbacks |
+  |---|---:|:---|---:|
+  | `cadence_rule` | **0.4465** | {3, 0, 3} | 2 |
+  | `periodic` | 0.4436 | {4, 0, 2} | 1 |
+  | `reactive_full` | 0.4397 | {0, 0, 6} | 2 |
+
+**Artifacts referenced.**
+- `experiments/phase_f_tree_sla045.json`
+
+**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+
+---
+
+### R-Gate-F-text-domain: real Yelp vocabulary drift via 1★/5★ → 2★/4★ domain shift (W-29 followup)
+*Recorded: 2026-08-30*
+
+**Setup.** - New `cadence.data.text_yelp.load_yelp_domain_shift` loader. - Train slice: ≤ 5000 reviews at 1★ (label 0) + 5★ (label 1). - Stream slice: ≤ 5000 reviews at 2★ (label 0) + 4★ (label 1). - TFIDFLogRegAdapter with 20k features + bigrams, vocabulary frozen at pretrain (so partial retrains can't silently mask drift). - 3 seeds × 6 windows × 500 rows/window, SLA 0.85, PSI threshold 0.15.
+
+_No tables extracted — see the raw entry in `docs/results.md`._
+
+**Artifacts referenced.**
+- `experiments/phase_f_text_domain.json`
 
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
