@@ -22,7 +22,7 @@ ships in `scripts/colab_gate_a.py` for the paper-grade run.
 
 | Claim | Hypothesis | Verdict | Evidence |
 |---|---|---|---|
-| A | CDAG + GNN attribution beats correlational PSI | **SUPPORTED (paper-scale)** | R-Gate-B at n=9 hard subset p=0.016; R-Gate-B-n10 (this session) at n=50, per easy/hard subset breakdown, p in results.md |
+| A | CDAG + GNN attribution beats correlational PSI | **SUPPORTED on AUROC (paper-scale), MIXED on MRR** | R-Gate-B-n10 at n=50: gnn>psi on AUROC p=0.000113 (<<0.001, Bonferroni-clean); gnn>psi on MRR p=0.284 (tie — PSI wins top-1 0.60 vs 0.50, GNN wins top-3 0.70 vs 0.60). gnn>structural on both p=7.9e-7. Honest headline: GNN wins the "distinguish root from crowd" metric decisively, ties on strict rank-1 |
 | B | Learned surrogate predicts post-fix F1 for a node without running the intervention | **SUPPORTED (calibration)** | R-Gate-C: joint train val R²=0.888, MAE=0.036 on 90 triples. Train/test gap on unrecoverable OOD scenarios recorded honestly. |
 | C — flagship | RSO gives a strict cost win over baselines under a cost + carbon + SLA reward | **PARETO ONLY on this session's compute budget** | R-Gate-E Elec2: 69% GPU-hr saved vs reactive_full at −1.7% F1. Not a strict dominance. Full 10-seed × 30k Gate A run pending Colab (`scripts/colab_gate_a.py`). |
 | H3 | Partial EWC retrain has less forgetting than naive full | **SUPPORTED (paper-scale)** | R-Gate-F-mnist-n10: partial forgetting −0.032 vs full +0.395 vs full+replay −0.017. Wilcoxon vs both baselines p = 0.001 (n=10). |

@@ -22,6 +22,7 @@ exact `experiments/*.json` artifact that produced its numbers.
 - [Gate-G: Product surface + paper skeleton + adversarial audit refresh](#r-gate-g)
 - [Gate-F-text: Vocabulary drift on Yelp reviews — text adapter through the CADENCE loop (W-29 fix)](#r-gate-f-text)
 - [Gate-G-clean-clone: docker-compose config validated, images not booted (W-31 partial)](#r-gate-g-clean-clone)
+- [Gate-B-n10: H1 attribution at paper scale — 5 scenarios × 10 seeds, honest mixed verdict](#r-gate-b-n10)
 - [Gate-F-tree-sla045: LightGBM on GMSC at real SLA=0.45 — CADENCE genuinely acts, sits on the Pareto frontier](#r-gate-f-tree-sla045)
 - [Gate-F-text-domain: real Yelp vocabulary drift via 1★/5★ → 2★/4★ domain shift (W-29 followup)](#r-gate-f-text-domain)
 - [Gate-F-mnist-n10: H3 at paper scale — partial EWC beats naive-full AND full-with-replay (p<0.001)](#r-gate-f-mnist-n10)
@@ -314,6 +315,26 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Setup.** - `docker --version` → **29.6.2**; `docker compose version` → **v5.3.1**. - `docker info` → **daemon not running** (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) on this box. Docker Desktop is installed but not started. - `dashboard/app.py` — `python -m py_compile dashboard/app.py` exit 0.
 
 _No tables extracted — see the raw entry in `docs/results.md`._
+
+**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+
+---
+
+### R-Gate-B-n10: H1 attribution at paper scale — 5 scenarios × 10 seeds, honest mixed verdict
+*Recorded: 2026-08-30*
+
+**Setup.** - Full 5 default scenarios (`amount_multiplicative_abrupt`, `amount_multiplicative_gradual`, `v14_additive_abrupt`, `v14_concept_shift`, `time_gradual`). - **10 seeds → 50 paired samples per scorer pair.** - GNN pretrained on 200 sandbox tuples × 20 joint epochs. - `windows_per_episode=3`, `window_size=1024`, `sandbox_window_size=512`. - Wall-clock 37 min end-to-end on RTX 4070 Laptop; GNN peak VRAM 72.5 MB. - Artifact: `experiments/phase_b_n10.
+
+**Statistical test.** paired Wilcoxon p ≈ 0.000113 → PASS at α=0.05
+
+| scorer          | top-1 acc     | top-3 acc     | MRR           | AUROC         |
+  |-----------------|--------------:|--------------:|--------------:|--------------:|
+  | psi_stub        | 0.600 ± 0.490 | 0.600 ± 0.490 | 0.639 ± 0.442 | 0.869 ± 0.164 |
+  | cdag_structural | 0.200 ± 0.400 | 0.200 ± 0.400 | 0.343 ± 0.337 | 0.779 ± 0.274 |
+  | **gnn_learned** | 0.500 ± 0.500 | **0.700 ± 0.458** | **0.665 ± 0.349** | **0.955 ± 0.056** |
+
+**Artifacts referenced.**
+- `experiments/phase_b_n10.json`
 
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 
