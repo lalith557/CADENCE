@@ -22,6 +22,7 @@ exact `experiments/*.json` artifact that produced its numbers.
 - [Gate-G: Product surface + paper skeleton + adversarial audit refresh](#r-gate-g)
 - [Gate-F-text: Vocabulary drift on Yelp reviews — text adapter through the CADENCE loop (W-29 fix)](#r-gate-f-text)
 - [Gate-G-clean-clone: docker-compose config validated, images not booted (W-31 partial)](#r-gate-g-clean-clone)
+- [Gate-F-mnist-n10: H3 at paper scale — partial EWC beats naive-full AND full-with-replay (p<0.001)](#r-gate-f-mnist-n10)
 - [Gate-A-w28: PPO retrained on Step A 15-d observation (W-28 close-out)](#r-gate-a-w28)
 
 ## Result tables (one section per R-entry)
@@ -311,6 +312,26 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Setup.** - `docker --version` → **29.6.2**; `docker compose version` → **v5.3.1**. - `docker info` → **daemon not running** (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) on this box. Docker Desktop is installed but not started. - `dashboard/app.py` — `python -m py_compile dashboard/app.py` exit 0.
 
 _No tables extracted — see the raw entry in `docs/results.md`._
+
+**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+
+---
+
+### R-Gate-F-mnist-n10: H3 at paper scale — partial EWC beats naive-full AND full-with-replay (p<0.001)
+*Recorded: 2026-08-30*
+
+**Setup.** - Task A = digits {0,1}, Task B = digits {2,3}. Genuinely disjoint classes; Task A images never seen during Task B retraining. - 10 seeds. `ewc_penalty=5000`, `finetune_epochs=3`, `fullretrain_epochs=5`. - Three paths per seed: * `partial_ewc_layer1` — Layer-1 fine-tune with EWC-weighted penalty on the Task-A Fisher. * `full_naive_no_replay` — fresh Adam fit on Task B ONLY (strict; the R-Gate-F baseline).
+
+**Statistical test.** paired Wilcoxon p ≈ 0.0009766 → PASS at α=0.05
+
+| path | Task A forgetting | Task B F1 |
+  |---|---:|---:|
+  | `partial_ewc_layer1` | **-0.032 ± 0.002** (slight *gain*) | 0.802 ± 0.013 |
+  | `full_with_replay` | **-0.017 ± 0.003** (slight *gain*) | 0.979 ± 0.003 |
+  | `full_naive_no_replay` | **+0.395 ± 0.019** (39.5 % drop) | 0.990 ± 0.002 |
+
+**Artifacts referenced.**
+- `experiments/phase_f_mnist_n10.json`
 
 **Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
 

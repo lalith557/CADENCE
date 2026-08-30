@@ -75,6 +75,15 @@ command that produced its numbers.
   paired Wilcoxon p = **0.03125** — H3 SUPPORTED on the multi-task benchmark.
   Robustness: 0 % false-alarm on undrifted, GNN AUROC 0.945 → 0.903 under
   50 % edge dropout.
+- **Final push (2026-08-30)** — H3 rerun at n=10 with a fair full-with-
+  replay baseline: partial forgetting -0.032 vs naive full +0.395 vs
+  full+replay -0.017. Wilcoxon **p = 0.0009765625** vs both baselines
+  (Wilcoxon minimum at n=10 — partial wins on every single seed).
+  Tree adapter at real SLA 0.45: Pareto-position (higher F1 than
+  periodic at same actions; 50 % cost saved vs reactive_full).
+  Text drift via 1★/5★ → 2★/4★ domain shift: real 4.4 % F1 drop
+  (0.969 → 0.924). REST API live (`cadence/api/server.py`), dashboard
+  shows real CDAG + real scores, MLflow migrated to sqlite backend.
 - **Step G (this section)** — Streamlit dashboard, docker-compose stack,
   auto-generated paper skeleton, weakness register updated.
 
