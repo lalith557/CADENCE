@@ -1,0 +1,79 @@
+{
+  "adapter_family": "text_tfidf_lr",
+  "early_summary": {
+    "name": "yelp_early_2013",
+    "n": 6000,
+    "positive_rate": 0.8083333333333333,
+    "date_min": "2005-03-01 17:47:15",
+    "date_max": "2013-12-31 20:38:57"
+  },
+  "late_summary": {
+    "name": "yelp_late_2018",
+    "n": 6000,
+    "positive_rate": 0.8023333333333333,
+    "date_min": "2018-01-01 00:42:40",
+    "date_max": "2018-10-04 18:22:35"
+  },
+  "baseline_train_f1": 0.9474768280123584,
+  "undrifted_stream_f1": 0.9640317858636553,
+  "vocab_size": 20000,
+  "aggregates": {
+    "cadence_rule": {
+      "n_seeds": 2,
+      "mean_f1": [
+        0.9639684628628252,
+        0.0
+      ],
+      "min_f1": [
+        0.9575289575289575,
+        0.0
+      ],
+      "actions_full": 0.0,
+      "actions_partial": 0.0,
+      "actions_noop": 6.0,
+      "rollbacks_mean": 0.0
+    },
+    "periodic": {
+      "n_seeds": 2,
+      "mean_f1": [
+        0.9670507125801934,
+        0.0
+      ],
+      "min_f1": [
+        0.9625,
+        0.0
+      ],
+      "actions_full": 2.0,
+      "actions_partial": 0.0,
+      "actions_noop": 4.0,
+      "rollbacks_mean": 0.0
+    },
+    "reactive_full": {
+      "n_seeds": 2,
+      "mean_f1": [
+        0.9639684628628252,
+        0.0
+      ],
+      "min_f1": [
+        0.9575289575289575,
+        0.0
+      ],
+      "actions_full": 0.0,
+      "actions_partial": 0.0,
+      "actions_noop": 6.0,
+      "rollbacks_mean": 0.0
+    }
+  },
+  "config": {
+    "config": "configs/default.yaml",
+    "seeds": 2,
+    "per_slice_cap": 6000,
+    "max_lines_scan": 200000,
+    "window_size": 500,
+    "n_windows": 6,
+    "sla": 0.85,
+    "periodic_period": 3,
+    "psi_threshold": 0.15,
+    "out": "experiments/phase_f_text.json"
+  }
+}

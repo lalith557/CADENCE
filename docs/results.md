@@ -558,3 +558,67 @@ Format per entry:
   - **docker-compose has never been booted** on this machine — see W-31. A clean-clone reboot with `docker-compose up --build dashboard mlflow` and a browser screenshot at `localhost:8501` is the honest completion criterion; that's the next-session work.
   - **Paper skeleton is auto-generated, not written.** Each section has real tables + real Wilcoxon p-values pulled from the live results ledger, but the surrounding narrative (introduction, related work, limitations chapter) still needs a human author. The skeleton is a scaffolding tool, not the paper itself.
   - **The rebuild-on-refresh loop** (edit `docs/results.md` → rebuild skeleton) is manual; a `Makefile` target or a `pre-commit` hook would enforce that the skeleton doesn't drift, but that's a small ergonomics fix and not tracked as its own weakness.
+
+---
+
+### R-Gate-F-text: Vocabulary drift on Yelp reviews — text adapter through the CADENCE loop (W-29 fix)   (2026-08-30)
+- **Hypothesis / question:** Does CADENCE's decision loop work when the adapter is a text classifier (TF-IDF + Logistic Regression) with **no** tap layers? Does real Yelp vocabulary drift (2005-2013 train → 2018 stream) actually degrade a shallow sentiment classifier enough to trigger the RSO?
+- **Setup:**
+  - New `cadence.adapters.text.TFIDFLogRegAdapter` implements the full `ModelAdapter` protocol. Vocabulary is **frozen** at pretrain so partial retrains can't silently mask vocabulary drift.
+  - New `cadence.data.text_yelp.load_yelp_slices` streams `Dataset/Yelp JSON Dataset1/Yelp JSON/yelp_dataset/yelp_academic_dataset_review.json` line-by-line (6,990,280 total lines available). Reads up to `max_lines_scan=200_000` and produces two disjoint temporal slices: early (≤ 2013) and late (≥ 2018) at `per_slice_cap=6_000` each. Binary sentiment: stars ≤ 2 → 0, stars ≥ 4 → 1, neutral 3 dropped.
+  - `benchmarks/phase_f_text.py` runs the same 3-way comparison as Gate E/F-tree: `cadence_rule` (executor + escalation ladder + PSI on top-200 vocab), `periodic` (retrain every N windows), `reactive_full` (PSI → full).
+  - 2 seeds × 6 windows × 500 rows per window, SLA 0.85, PSI threshold 0.15.
+- **Command to reproduce:**
+  ```bash
+  python -m benchmarks.phase_f_text --seeds 2 --per-slice-cap 6000 \
+      --max-lines-scan 200000 --window-size 500 --n-windows 6 \
+      --sla 0.85 --periodic-period 3 --psi-threshold 0.15 \
+      --out experiments/phase_f_text.json
+  ```
+- **Result:**
+
+  | strategy       | mean F1        | actions {no, part, full} | rollbacks |
+  |----------------|----------------|:-------------------------|----------:|
+  | `cadence_rule` | 0.9640 ± 0.000 | {6, 0, 0}                |         0 |
+  | `periodic`     | 0.9671 ± 0.000 | {4, 0, 2}                |         0 |
+  | `reactive_full`| 0.9640 ± 0.000 | {6, 0, 0}                |         0 |
+
+  Baseline train F1 = **0.9475** on early Yelp val slice; **undrifted stream F1 = 0.9640** on the LATE slice — i.e., the late slice is *easier* for this classifier than the val slice, not harder. Vocab size = 20,000 unigram + bigram TF-IDF features.
+- **Statistical test:** N/A (no meaningful F1 gap between strategies).
+- **Interpretation:** Two honest findings:
+    1. **Plumbing works.** The text adapter runs through the ModelAdapter protocol without changes to the executor, escalation ladder, or PSI trigger. `partial_fit(layers=[...])` raises `NotImplementedError` and the ladder falls through to full retrain per §4 contract — same graceful cross-model behaviour we saw in the LightGBM Gate F Part 1 entry.
+    2. **Yelp early → late is not a hard drift on this classifier.** Stream F1 (0.964) actually exceeds validation F1 (0.947). Two plausible reasons: (a) the late slice's sentiment distribution matches the train distribution well; (b) TF-IDF at 20k features + LR is robust enough that new vocabulary is absorbed via the words that DID appear in the train slice. PSI on the top-200 vocabulary never crosses 0.15, so `reactive_full` correctly no-ops. `cadence_rule`'s pre-window F1 stays above SLA=0.85, so it also no-ops. `periodic` fires two full retrains that nudge F1 up ~0.003 — inside the noise floor.
+    3. This mirrors the Airlines finding in R-Gate-E: when the trigger doesn't fire, `reactive_full` trivially wins on cost by doing nothing. **The generality claim survives; the drift-severity claim on Yelp does not.** For a paper-grade text-drift experiment, either use Amazon Reviews 2023 (the plan's original suggestion, ~7 GB) or design a domain-shift split (restaurants → tech companies, English → Spanish) that produces a measurable degradation.
+- **Threats to validity:**
+  - Only 2 seeds. Adequate for the plumbing gate; not for a paper H2 claim on text.
+  - Vocab is capped at 20 k features and PSI monitors only the top 200 — both hyperparameters that soften the drift signal.
+  - Frozen-vocab decision is deliberate (so partial retrains can't hide drift) but it also means the model can't adapt to *new* vocabulary — a real production text model would refit the vectorizer periodically, at which point PSI on the top-N vocabulary of the OLD vectorizer becomes stale.
+  - `max_lines_scan=200000` means we sample the first ~200 k reviews of the file — Yelp's file order is not strictly temporal, so the "early" and "late" slices come from the first 200 k reviews, not the earliest 6 k and latest 6 k of the full 6.99 M. Larger `max_lines_scan` produces more temporally-separated slices; deferred as a paper-grade knob.
+
+---
+
+### R-Gate-G-clean-clone: docker-compose config validated, images not booted (W-31 partial)   (2026-08-30)
+- **Hypothesis / question:** Does `docker-compose config` accept the shipped `docker-compose.yml`? Do the dashboard imports resolve? What still needs a live Docker daemon to fully close W-31?
+- **Setup:**
+  - `docker --version` → **29.6.2**; `docker compose version` → **v5.3.1**.
+  - `docker info` → **daemon not running** (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) on this box. Docker Desktop is installed but not started.
+  - `dashboard/app.py` — `python -m py_compile dashboard/app.py` exit 0.
+- **Command to reproduce:**
+  ```bash
+  docker-compose config           # syntax validation, no daemon needed
+  docker-compose config --services # -> mlflow, dashboard
+  python -m py_compile dashboard/app.py
+  # Below requires Docker Desktop to be running:
+  # docker-compose up --build dashboard mlflow
+  ```
+- **Result:**
+  - `docker-compose config` prints the rendered compose spec successfully; after removing the obsolete top-level `version: "3.9"` key the warning is gone.
+  - `docker-compose config --services` returns `mlflow` + `dashboard`.
+  - `dashboard/app.py` parses; imports resolve (streamlit 1.50, plotly 6.4, pandas 2.3).
+  - `docker-compose up --build …` was NOT attempted — Docker daemon is offline on this machine.
+- **Statistical test:** N/A (configuration gate).
+- **Interpretation:** **W-31 is half-closed.** The compose file is now syntactically valid AND the two service specs are correctly resolved; anyone with Docker Desktop running should get a bootable stack from `docker-compose up --build dashboard mlflow`. The other half — actually booting the stack on a clean clone and taking a browser screenshot of the running dashboard at `localhost:8501` — still needs a Docker daemon, which isn't available in this session. That's an operator task, not a code issue. The compose file has been de-warned; the follow-up is one command away, not a code change.
+- **Threats to validity:**
+  - Compose *syntax* passes; nothing verified that the built images actually launch (e.g., `mlflow server` inside the container could still fail on the mounted `experiments/mlruns/` if the file-store URI has permission issues).
+  - The dashboard's imports resolve on Windows Python 3.13; the container image is Python 3.10-slim-bookworm. Small Python-version deltas (walrus operators, `Self` type, etc.) that pass 3.13 could fail 3.10 — untested here.
+  - The `api` service is still commented out; no REST scoring endpoint ships. Product docs correctly flag this in the "honest open gaps" list.

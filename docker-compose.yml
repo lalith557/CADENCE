@@ -11,8 +11,6 @@
 # scoring endpoint under `cadence/api/`, but it isn't in-tree yet. Left as
 # a follow-up (§Gate G, "clean-clone quickstart").
 
-version: "3.9"
-
 services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:v3.15.2

@@ -20,6 +20,8 @@ exact `experiments/*.json` artifact that produced its numbers.
 - [Gate-E: Real drift end-to-end on Elec2 + Airlines (outcome graded)](#r-gate-e)
 - [Gate-F: generality (tree adapter, MNIST forgetting) + robustness (false-alarm, telemetry loss)](#r-gate-f)
 - [Gate-G: Product surface + paper skeleton + adversarial audit refresh](#r-gate-g)
+- [Gate-F-text: Vocabulary drift on Yelp reviews — text adapter through the CADENCE loop (W-29 fix)](#r-gate-f-text)
+- [Gate-G-clean-clone: docker-compose config validated, images not booted (W-31 partial)](#r-gate-g-clean-clone)
 
 ## Result tables (one section per R-entry)
 
@@ -256,6 +258,32 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 *Recorded: 2026-08-30*
 
 **Setup.** - New `dashboard/app.py` (Streamlit) reads `experiments/*.json` and renders four panels: F1 over time, CDAG layout, responsibility scores, decision + cost saved. Read-only over committed artifacts. - New `docker/Dockerfile.dashboard` + `docker-compose.yml` (dashboard + MLflow file store; API service left as a commented-out placeholder). - New `scripts/build_paper_skeleton.py` — parses `docs/results.
+
+_No tables extracted — see the raw entry in `docs/results.md`._
+
+**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+
+---
+
+### R-Gate-F-text: Vocabulary drift on Yelp reviews — text adapter through the CADENCE loop (W-29 fix)
+*Recorded: 2026-08-30*
+
+**Setup.** - New `cadence.adapters.text.TFIDFLogRegAdapter` implements the full `ModelAdapter` protocol. Vocabulary is **frozen** at pretrain so partial retrains can't silently mask vocabulary drift. - New `cadence.data.text_yelp.load_yelp_slices` streams `Dataset/Yelp JSON Dataset1/Yelp JSON/yelp_dataset/yelp_academic_dataset_review.json` line-by-line (6,990,280 total lines available).
+
+| strategy       | mean F1        | actions {no, part, full} | rollbacks |
+  |----------------|----------------|:-------------------------|----------:|
+  | `cadence_rule` | 0.9640 ± 0.000 | {6, 0, 0}                |         0 |
+  | `periodic`     | 0.9671 ± 0.000 | {4, 0, 2}                |         0 |
+  | `reactive_full`| 0.9640 ± 0.000 | {6, 0, 0}                |         0 |
+
+**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+
+---
+
+### R-Gate-G-clean-clone: docker-compose config validated, images not booted (W-31 partial)
+*Recorded: 2026-08-30*
+
+**Setup.** - `docker --version` → **29.6.2**; `docker compose version` → **v5.3.1**. - `docker info` → **daemon not running** (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) on this box. Docker Desktop is installed but not started. - `dashboard/app.py` — `python -m py_compile dashboard/app.py` exit 0.
 
 _No tables extracted — see the raw entry in `docs/results.md`._
 
