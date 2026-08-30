@@ -41,3 +41,48 @@ Enough to sign the first design partner:
 ## Why we can build it now
 - The paper's four novelty pieces (CDAG, GNN, surrogate, RSO) are all engineerable in 2026 with off-the-shelf primitives (PyG, SB3, causal-learn).
 - The mainstream MLOps monitoring market is now three years old — buyers understand the category, but the incumbents haven't moved from correlation to causation. That window is what we're jumping through.
+
+---
+
+## What's actually shipped, gate-by-gate (as of 2026-08-30)
+
+Every claim below points at a live entry in `docs/results.md` with the exact
+command that produced its numbers.
+
+- **Gate 1 (GPU)** — `cadence gpu-check` prints RTX 4070 Laptop + 13.05 measured
+  TFLOPs; every training run logs peak VRAM to MLflow. Carbon profile fixed
+  from the wrong `gtx-1650` default.
+- **Step A (RSO rescue)** — contested-SLA scenarios, EWC-in-sandbox, Augmented-
+  Lagrangian dual-λ, enriched 15-d observation. Wiring proven end-to-end
+  (R-Gate-A-smoke); full 30k-timestep evidence run queued.
+- **Step B (H1 / Claim A)** — GraphSAGE-style GNN over the CDAG on cuda beats
+  correlational PSI at α=0.05: MRR/AUROC paired Wilcoxon p = 0.0156 vs PSI,
+  p = 0.021–0.029 vs the pre-Step-B structural proxy.
+- **Step C (Claim B / closed loop)** — surrogate + joint GNN training on GPU;
+  one command runs pretrain → CDAG → GNN → surrogate → RSO → executor →
+  validation. Val R² = 0.888 on 90 intervention triples in 6.4 s / 65 MB VRAM.
+- **Step D (executor + fallbacks)** — Part-3B EWC executor + all 8 §4 fallbacks
+  (shadow, rollback, escalation ladder, unrecoverable guard, diffuse,
+  false-alarm, resource, cold-start). 21 tests, each fallback forced and
+  verified. Gate D H3 honest **negative** on Fraud (single-task limitation).
+- **Step E (real drift)** — Elec2 + Airlines end-to-end. On Elec2 CADENCE saves
+  **69 % compute vs reactive_full at 1.7 % F1 loss**; strict-dominates neither
+  baseline but sits on the Pareto frontier. Airlines shows PSI silent on
+  hashed categoricals — honest limit recorded.
+- **Step F (generality + H3 rerun)** — LightGBM tree adapter on GMSC:
+  cost-dominates baselines at equal F1. Split-MNIST {0,1}→{2,3}:
+  partial EWC forgetting = **-0.030**, naive full forgetting = **+0.386**,
+  paired Wilcoxon p = **0.03125** — H3 SUPPORTED on the multi-task benchmark.
+  Robustness: 0 % false-alarm on undrifted, GNN AUROC 0.945 → 0.903 under
+  50 % edge dropout.
+- **Step G (this section)** — Streamlit dashboard, docker-compose stack,
+  auto-generated paper skeleton, weakness register updated.
+
+## Honest open gaps
+- **Full Gate A statistical run** (10 seeds × 30 k PPO steps) hasn't landed
+  its R-entry yet — the current dashboard falls back to a rule policy.
+- **Text drift** (Amazon Reviews / Yelp) not measured — ~7 GB download + text
+  classifier scaffolding outside session budget.
+- **Live-streaming ingest** is still the batched-window sandbox. The
+  Streamlit dashboard is read-only over committed artifacts.
+- **Prior-art search** (W-4) for the CDAG novelty claim is not filed.

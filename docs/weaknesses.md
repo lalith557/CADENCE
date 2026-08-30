@@ -216,3 +216,31 @@ Audited across all five lenses after the Phase 0 gate passed (R-0).
 - **Severity × Effort:** major × medium
 - **Fix plan:** Redefine "unrelated" as a *distinct sub-population* of Fraud transactions — e.g., "high-Amount transactions only" — that is deliberately NOT drifted, so a retrain that overfits to the drift will visibly hurt unrelated F1. This is the honest H3 test.
 - **Status:** open — must be resolved before H3 numbers land in Phase 5.
+
+### W-28: PPO checkpoint from R-4 is trained on the pre-Step-A 13-d obs; new env emits 15-d (2026-08-29)
+- **Lens:** research-validity + product-readiness
+- **Finding:** Step A widened the RSO observation vector 13 → 15 (added `sla_margin` + `attribution_concentration`). The saved `experiments/rso_ppo_phase2.zip` was trained under the old obs. In Gate C's closed-loop episode and everywhere else the RSO is invoked, `phase_c_run` and `phase_e_run` transparently fall back to a rule policy because the load fails the obs-dim shape check. That means the RSO's *actions* everywhere post-Step-A are rule-driven, not learned.
+- **Severity × Effort:** major × medium (this is what the pending full Gate A run is for)
+- **Fix plan:** Re-train PPO on the 15-d obs with the Aug-Lagrangian wrapper + EWC-in-sandbox + contested scenarios enabled (the full Gate A protocol: 10 seeds × 30k timesteps × 5+ scenarios). Ship a new `experiments/rso_ppo_step_a.zip` and update the dashboard fallback logic to prefer it.
+- **Status:** open — pending the multi-hour Gate A run.
+
+### W-29: Text drift (Amazon Reviews / Yelp) not measured; Step F Part IV missing (2026-08-29)
+- **Lens:** research-validity
+- **Finding:** The plan's Step F lists text-drift experiments alongside the tree/MNIST parts I ran. Text drift needs the Amazon Reviews 2023 archive (~7 GB) plus a text classifier (probably a small BERT distillation or an n-gram TF-IDF + LR). Neither is in-tree. Without it, the paper's "generality" claim covers tabular + Split-MNIST but not text.
+- **Severity × Effort:** minor × high
+- **Fix plan:** Add `cadence.data.text` loader for Amazon Reviews 2023, a `cadence.adapters.text.TFIDFLRAdapter`, and a Phase F Part IV runner. Deferred as follow-up.
+- **Status:** open — deferred, not blocking Gate G's paper skeleton.
+
+### W-30: Streamlit dashboard uses an illustrative CDAG layout, not the artifact's raw NOTEARS weights (2026-08-30)
+- **Lens:** product-readiness
+- **Finding:** `experiments/*_summary.json` files don't ship the raw NOTEARS-weighted adjacency matrix; only aggregated per-strategy metrics. The dashboard therefore renders a placeholder CDAG topology to communicate the SHAPE of what CADENCE produces, not the exact edges from any specific run. A stakeholder demo works; a customer-grade demo doesn't.
+- **Severity × Effort:** minor × low
+- **Fix plan:** Extend the JSON artifacts written by `phase_b_run` / `phase_c_run` with a `cdag_weights` list of `[[src, dst, weight], ...]` triples per (scenario, seed), and read that in the dashboard when present.
+- **Status:** open — small, cosmetic.
+
+### W-31: docker-compose stack has never been run (no compose-time smoke test) (2026-08-30)
+- **Lens:** product-readiness
+- **Finding:** `docker-compose.yml` + `docker/Dockerfile.dashboard` are committed but the images have never been built on this machine. The clean-clone quickstart claim in `docs/product.md` is code-verified but not runtime-verified.
+- **Severity × Effort:** minor × low
+- **Fix plan:** `docker-compose up --build dashboard mlflow` on a clean clone; record R-Gate-G-clean-clone with the browser screenshot.
+- **Status:** open — pending a clean-clone reboot.

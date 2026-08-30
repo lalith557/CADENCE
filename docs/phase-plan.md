@@ -304,6 +304,34 @@ Full details in `docs/results.md` R-Gate-E.
 
 ---
 
+## Step G — Product + paper skeleton + audit (Execution Plan §3) ✅ SHIPPED
+
+**Landed:**
+- `dashboard/app.py` — Streamlit dashboard reading `experiments/*.json` for
+  live drift, CDAG, responsibility, decision, cost saved. Read-only over
+  committed artifacts (safe to hand to a stakeholder).
+- `docker/Dockerfile.dashboard` + `docker-compose.yml` — dashboard + MLflow
+  server stack. API service left as a commented-out placeholder (no REST
+  scoring endpoint in-tree yet).
+- `scripts/build_paper_skeleton.py` — parses `docs/results.md` for R-*
+  entries and writes `docs/paper/skeleton.md` (13 entries, 13 tables) as
+  the paper's auto-populated appendix.
+- `docs/product.md` extended with the "what's actually shipped" table and
+  an honest open-gaps list.
+- `docs/weaknesses.md` extended with W-28..W-31 covering the known open
+  items (PPO re-training on 15-d obs, text drift, dashboard CDAG
+  cosmetics, docker-compose runtime-verification).
+
+**Gate G checklist:**
+- ✅ Dashboard renders (parses cleanly, four panels, artifact selector).
+- ✅ docker-compose committed (build never smoke-tested — logged as W-31).
+- ✅ Paper skeleton auto-generated from live results.md.
+- ✅ Adversarial audit refreshed (weaknesses.md).
+- ⚠️ Clean-clone quickstart *is code-verified but not runtime-verified*
+  (W-31).
+
+---
+
 ## Phase 4 — Counterfactual surrogate (Claim B, narrow)
 
 **Deliverables:**

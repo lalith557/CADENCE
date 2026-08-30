@@ -1,0 +1,28 @@
+FROM python:3.10-slim-bookworm
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    MLFLOW_ALLOW_FILE_STORE=true
+
+WORKDIR /cadence
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md ./
+COPY cadence ./cadence
+COPY configs ./configs
+
+# Dashboard needs streamlit + plotly + pandas — install the base package
+# plus the api extra which pulls those in.
+RUN pip install --upgrade pip && pip install -e .[api]
+
+# Everything the dashboard READS at runtime (no training) — mounted via
+# docker-compose volumes so live artifacts show up without rebuilds.
+COPY dashboard ./dashboard
+
+EXPOSE 8501
+CMD ["streamlit", "run", "dashboard/app.py", "--server.address=0.0.0.0", "--server.headless=true"]

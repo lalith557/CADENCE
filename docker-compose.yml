@@ -1,0 +1,59 @@
+# CADENCE local stack: dashboard + MLflow server + optional FastAPI hook.
+#
+# Usage:
+#   docker-compose up dashboard mlflow
+#
+# The dashboard reads `experiments/*.json` from the mounted volume so any
+# `python -m benchmarks.phase_*_run` on the host immediately appears in the
+# UI without a rebuild.
+#
+# The `api` service is a placeholder — the paper skeleton lists a REST
+# scoring endpoint under `cadence/api/`, but it isn't in-tree yet. Left as
+# a follow-up (§Gate G, "clean-clone quickstart").
+
+version: "3.9"
+
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.15.2
+    command: >
+      mlflow server
+        --host 0.0.0.0 --port 5000
+        --backend-store-uri file:/cadence/experiments/mlruns
+        --default-artifact-root file:/cadence/experiments/mlruns
+    environment:
+      - MLFLOW_ALLOW_FILE_STORE=true
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./experiments:/cadence/experiments
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dashboard
+    image: cadence-dashboard:local
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./experiments:/cadence/experiments:ro
+      - ./dashboard:/cadence/dashboard:ro
+      - ./docs:/cadence/docs:ro
+    depends_on:
+      - mlflow
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - MLFLOW_ALLOW_FILE_STORE=true
+
+  # Placeholder — future REST scoring endpoint. Uncomment once
+  # cadence.api.server exposes a FastAPI app.
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile
+  #   image: cadence-api:local
+  #   command: uvicorn cadence.api.server:app --host 0.0.0.0 --port 8000
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - mlflow

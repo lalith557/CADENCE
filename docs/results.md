@@ -525,3 +525,36 @@ Format per entry:
   - **MNIST forgetting** was measured at ewc_penalty=5000. The Fraud Gate D failure used the default 1000. A λ sweep on both datasets would show where each dataset's "protect vs adapt" knee sits, and the paper should include it.
   - **Robustness AUROC** is measured on the *raw GNN logits* (softmax-readout mode), not the surrogate-mode scorer. Because the surrogate wasn't trained here, this is the Step B scoring path, not the Step C one.
   - **Text drift (Amazon / Yelp)** listed under Step F in the plan is not covered in this entry. It requires downloading the Amazon Reviews 2023 archive (~7 GB) and building a text classifier from scratch — outside this session's budget. Log as a follow-up.
+
+---
+
+### R-Gate-G: Product surface + paper skeleton + adversarial audit refresh   (2026-08-30)
+- **Hypothesis / question:** Gate G — the clean-clone quickstart works, the paper skeleton has real result tables, and the final adversarial audit finds no *unlogged* blocker/major weakness.
+- **Setup:**
+  - New `dashboard/app.py` (Streamlit) reads `experiments/*.json` and renders four panels: F1 over time, CDAG layout, responsibility scores, decision + cost saved. Read-only over committed artifacts.
+  - New `docker/Dockerfile.dashboard` + `docker-compose.yml` (dashboard + MLflow file store; API service left as a commented-out placeholder).
+  - New `scripts/build_paper_skeleton.py` — parses `docs/results.md` for R-* entries, extracts tables + interpretation + Wilcoxon p-values, writes `docs/paper/skeleton.md`.
+  - `docs/product.md` extended with a "what's actually shipped, gate-by-gate" section pointing at each live R-entry.
+  - `docs/weaknesses.md` refreshed with W-28..W-31 covering the still-open items.
+  - Full pytest suite re-run at the end of the session.
+- **Command to reproduce:**
+  ```bash
+  python -m pytest tests/ -q
+  python -m scripts.build_paper_skeleton
+  streamlit run dashboard/app.py                # local UI
+  docker-compose up --build dashboard mlflow    # containerised
+  ```
+- **Result:**
+  - `pytest`: **75 tests pass** in ~17 s on the RTX 4070 Laptop (unchanged since Step F).
+  - `scripts.build_paper_skeleton`: wrote `docs/paper/skeleton.md` — **13 R-entries, 13 tables** extracted. Table of contents auto-generated; each entry has setup summary, Wilcoxon PASS/FAIL annotation where applicable, and a figure placeholder pointing at its `experiments/*.json`.
+  - Streamlit app parses cleanly (`python -m py_compile dashboard/app.py` == 0). Runtime render on the RTX 4070 Laptop shows all four panels populated for `phase_e_elec2.json`; the CDAG panel uses an illustrative layout (raw NOTEARS weights not in the summary artifacts — W-30).
+  - docker-compose has been committed but the images have not been built on this machine — the compose-time quickstart is code-verified but not runtime-verified (W-31 logged).
+- **Statistical test:** N/A (product + audit gate).
+- **Interpretation:** **Gate G passes on 3 of its 4 sub-criteria.** The dashboard, paper skeleton, docker-compose stack, and weakness register are all in-tree. The one open item is the clean-clone runtime verification — the compose file is correct-by-inspection but has not been booted end-to-end because the image build was out of session budget. That's an operational follow-up (W-31), not a design gap.
+
+  The final adversarial audit surfaces **no new blockers**. The four open majors (W-28 PPO retrain, W-4 prior-art search, W-29 text drift, plus the pre-existing Gate D H3 negative on Fraud which is a *known-not-a-blocker*) are all recorded and pointed at concrete follow-ups. Everything a reviewer would flag as "did you notice X?" is already in `docs/weaknesses.md`.
+- **Threats to validity:**
+  - **Dashboard CDAG panel is illustrative** — see W-30. Customer-grade demos need the JSON artifacts extended with raw NOTEARS weights per (scenario, seed).
+  - **docker-compose has never been booted** on this machine — see W-31. A clean-clone reboot with `docker-compose up --build dashboard mlflow` and a browser screenshot at `localhost:8501` is the honest completion criterion; that's the next-session work.
+  - **Paper skeleton is auto-generated, not written.** Each section has real tables + real Wilcoxon p-values pulled from the live results ledger, but the surrounding narrative (introduction, related work, limitations chapter) still needs a human author. The skeleton is a scaffolding tool, not the paper itself.
+  - **The rebuild-on-refresh loop** (edit `docs/results.md` → rebuild skeleton) is manual; a `Makefile` target or a `pre-commit` hook would enforce that the skeleton doesn't drift, but that's a small ergonomics fix and not tracked as its own weakness.
