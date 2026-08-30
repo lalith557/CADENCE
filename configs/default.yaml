@@ -63,5 +63,9 @@ budget:
 
 experiment:
   seed: 42
-  mlflow_uri: file:./experiments/mlruns
+  # mlflow >=2 supports sqlite natively (P5 hygiene fix, W-14). The old
+  # `file:./experiments/mlruns` still works if MLFLOW_ALLOW_FILE_STORE=true
+  # is set (see cadence/common/tracking.py) but sqlite is now the default
+  # so the file-store workaround stops being load-bearing.
+  mlflow_uri: sqlite:///experiments/mlflow.db
   experiment_name: cadence-default

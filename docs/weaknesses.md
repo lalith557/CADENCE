@@ -173,7 +173,7 @@ Audited across all five lenses after the Phase 0 gate passed (R-0).
 - **Finding:** In R-4 the RSO learns to never retrain because 4/5 scenarios have F1 above SLA even without action, and the cost weights make any retrain reward-negative. This is honest but leaves H2 partially untested (does RSO deliver Pareto improvements over baselines when the SLA IS contested?).
 - **Severity × Effort:** major × medium
 - **Fix plan:** Add scenarios where post-drift F1 sits *just below* SLA (~0.55 target vs 0.65 SLA) so no-op is definitely suboptimal and PPO must learn *when* to retrain. Also lift the SLA to 0.75 in a variant so most scenarios contest it.
-- **Status:** open — do before H2 is called "tested" for the paper.
+- **Status:** **fixed** in commit `788b1b98` (step-A). `benchmarks/synthetic_drift_gen/injector.py::build_contested_sla_scenarios` — 3 scenarios calibrated so each of {partial, full, no-op} is the correct action somewhere. Wired into `phase_a_run.py`.
 
 ### W-26: Sensitivity sweep exited mid-run with no traceback — investigate memory/handle leaks between cells   (2026-08-28)
 - **Lens:** product-readiness / correctness
@@ -187,7 +187,7 @@ Audited across all five lenses after the Phase 0 gate passed (R-0).
 - **Finding:** Every cell of R-4b's grid learned either "always no-op" or "always partial." Zero cells learned mixed / state-conditional policies. Classic RL pathology on tiny discrete action spaces + short training + sparse reward signal.
 - **Severity × Effort:** blocker × high (must be fixed before H2 is called "tested")
 - **Fix plan:** Combine several fixes in Phase 5: (1) longer training (30k+ timesteps), (2) contested-SLA scenarios (W-24), (3) richer state that includes drift-duration features, (4) consider continuous action (fraction-of-layers to retrain) instead of Discrete(3), (5) augmented-Lagrangian dual updates (W-22).
-- **Status:** open — Phase 5. Meanwhile, R-4/R-4b are recorded honestly with this weakness called out in their "threats to validity."
+- **Status:** **partially fixed**. Fixes (1) longer training, (2) contested-SLA, (3) richer 15-d state, (5) Aug-Lagrangian dual updates all landed in commit `788b1b98` (step-A). R-Gate-A-smoke shows partial+full both fired during 500-timestep training (no more bang-bang). Fix (4) continuous action still deferred. Full-scale Gate A statistical verdict pending the multi-hour Colab run (see task R2).
 
 ### W-25: RSO's mean_f1 is bit-exact across seeds (0.7539 to 16 digits) — PPO is deterministic given seeds but eval env is fully deterministic too   (2026-08-28)
 - **Lens:** correctness (cosmetic)
@@ -201,42 +201,42 @@ Audited across all five lenses after the Phase 0 gate passed (R-0).
 - **Finding:** Phase 2's Lagrangian is fixed-λ (=1.0) reward shaping, per D-16, not the dual-update scheme the reference proposes. Fine for measuring the *value* of a cost-aware retrain policy, but a reviewer will point out that fixed λ can't adapt to changing constraint tightness.
 - **Severity × Effort:** major × medium
 - **Fix plan:** Phase 5 — implement augmented-Lagrangian update: `λ ← max(0, λ + η · (rolling_SLA_violation_rate − target))`, log λ over training.
-- **Status:** open — Phase 5.
+- **Status:** **fixed** in commit `788b1b98` (step-A). `cadence/rso/lagrangian.py::AugmentedLagrangianEnv` wraps the sandbox and does dual ascent between resets. Verified in R-Gate-A-w28 where λ climbed 1.0 → 87.2 across training.
 
 ### W-23: Env's `_do_partial_retrain` does NOT apply EWC penalty; only the EWC-only baseline does   (2026-08-27)
 - **Lens:** correctness / research-validity
 - **Finding:** In the sandbox env, `partial` action calls `adapter.partial_fit(layers_to_update=["layer1"], replay_X=…)` with `ewc_penalty=0`. So the "partial" action is really "layer1-only fine-tune with replay, no EWC" — not "layer1-only EWC-regularized fine-tune" per the reference's Part 3B. This makes RSO's partial slightly less faithful to Claim C's protocol.
 - **Severity × Effort:** major × low
 - **Fix plan:** Add EWC computation to the env before the first partial, cache Fisher on the pre-drift model, apply penalty during the retrain. Same D-8 defaults as EWC-only baseline.
-- **Status:** open — will fix in Phase 5 when the executor lands (it's the executor's job, not the env's).
+- **Status:** **fixed** in commit `788b1b98` (step-A). `SandboxConfig.ewc_penalty` + `_do_partial_retrain` compute Fisher on a historical slice, cache theta*, and pass ewc_penalty to `adapter.partial_fit`. Confirmed by tests/unit/test_lagrangian.py.
 
 ### W-21: "Negative forgetting" — unrelated-segment F1 IMPROVES after retrains — is not what we expected   (2026-08-27)
 - **Lens:** research-validity
 - **Finding:** All three baselines record forgetting ≈ -0.01 to -0.09 (i.e., unrelated F1 got BETTER after retraining, not worse). Two possible causes: (a) our "unrelated" segment is a random 5% slice of the same training distribution, not a genuinely held-out different task — so any retrain that keeps the classifier reasonable will move the threshold usefully; (b) threshold retuning after partial_fit adapts to new probability distribution and happens to give better F1 on the unrelated segment as a side effect.
 - **Severity × Effort:** major × medium
 - **Fix plan:** Redefine "unrelated" as a *distinct sub-population* of Fraud transactions — e.g., "high-Amount transactions only" — that is deliberately NOT drifted, so a retrain that overfits to the drift will visibly hurt unrelated F1. This is the honest H3 test.
-- **Status:** open — must be resolved before H3 numbers land in Phase 5.
+- **Status:** **fixed** (two-step): (a) `cadence/data/disjoint.py::make_disjoint_split` in commit `384e9c77` (step-D) redefines "unrelated" as a genuinely disjoint sub-population (high_amount / late_time / class_positive). Gate D on Fraud was a negative result under this definition. (b) Commit `235d4d9d` (step-F) added `cadence/data/mnist_splits.py` for a genuinely-multi-task benchmark; Gate F reruns H3 on Split-MNIST tasks {0,1} vs {2,3} and gets partial < full forgetting at p=0.03125.
 
 ### W-28: PPO checkpoint from R-4 is trained on the pre-Step-A 13-d obs; new env emits 15-d (2026-08-29)
 - **Lens:** research-validity + product-readiness
 - **Finding:** Step A widened the RSO observation vector 13 → 15 (added `sla_margin` + `attribution_concentration`). The saved `experiments/rso_ppo_phase2.zip` was trained under the old obs. In Gate C's closed-loop episode and everywhere else the RSO is invoked, `phase_c_run` and `phase_e_run` transparently fall back to a rule policy because the load fails the obs-dim shape check. That means the RSO's *actions* everywhere post-Step-A are rule-driven, not learned.
 - **Severity × Effort:** major × medium (this is what the pending full Gate A run is for)
 - **Fix plan:** Re-train PPO on the 15-d obs with the Aug-Lagrangian wrapper + EWC-in-sandbox + contested scenarios enabled (the full Gate A protocol: 10 seeds × 30k timesteps × 5+ scenarios). Ship a new `experiments/rso_ppo_step_a.zip` and update the dashboard fallback logic to prefer it.
-- **Status:** open — pending the multi-hour Gate A run.
+- **Status:** **fixed (engineering close-out)** in commit `60d97a8a`. `experiments/rso_ppo_phase_a.zip` (156605 bytes) trained at 1 seed × 800 timesteps on 3 contested scenarios (9962 s wall). Verified to load into `phase_c_run` without obs-dim mismatch. Full paper-scale multi-seed sweep is a separate concern tracked under task R2.
 
 ### W-29: Text drift (Amazon Reviews / Yelp) not measured; Step F Part IV missing (2026-08-29)
 - **Lens:** research-validity
 - **Finding:** The plan's Step F lists text-drift experiments alongside the tree/MNIST parts I ran. Text drift needs the Amazon Reviews 2023 archive (~7 GB) plus a text classifier (probably a small BERT distillation or an n-gram TF-IDF + LR). Neither is in-tree. Without it, the paper's "generality" claim covers tabular + Split-MNIST but not text.
 - **Severity × Effort:** minor × high
 - **Fix plan:** Add `cadence.data.text` loader for Amazon Reviews 2023, a `cadence.adapters.text.TFIDFLRAdapter`, and a Phase F Part IV runner. Deferred as follow-up.
-- **Status:** open — deferred, not blocking Gate G's paper skeleton.
+- **Status:** **partially fixed** in commit `761bc47f`. `cadence/adapters/text.py::TFIDFLogRegAdapter` and `cadence/data/text_yelp.py` land plus `benchmarks/phase_f_text.py`. Yelp early → late by year showed the late slice is *easier* than train val (0.964 vs 0.947) so the drift claim on Yelp is untested. **Still open**: use a domain-shift split (restaurants → non-restaurants) that produces measurable degradation — tracked under task R5.
 
 ### W-30: Streamlit dashboard uses an illustrative CDAG layout, not the artifact's raw NOTEARS weights (2026-08-30)
 - **Lens:** product-readiness
 - **Finding:** `experiments/*_summary.json` files don't ship the raw NOTEARS-weighted adjacency matrix; only aggregated per-strategy metrics. The dashboard therefore renders a placeholder CDAG topology to communicate the SHAPE of what CADENCE produces, not the exact edges from any specific run. A stakeholder demo works; a customer-grade demo doesn't.
 - **Severity × Effort:** minor × low
 - **Fix plan:** Extend the JSON artifacts written by `phase_b_run` / `phase_c_run` with a `cdag_weights` list of `[[src, dst, weight], ...]` triples per (scenario, seed), and read that in the dashboard when present.
-- **Status:** open — small, cosmetic.
+- **Status:** **open** — being addressed in the final push (task P1).
 
 ### W-31: docker-compose stack has never been run (no compose-time smoke test) (2026-08-30)
 - **Lens:** product-readiness

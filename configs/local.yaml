@@ -63,5 +63,5 @@ budget:
 
 experiment:
   seed: 42
-  mlflow_uri: file:./experiments/mlruns
+  mlflow_uri: sqlite:///experiments/mlflow.db
   experiment_name: cadence-local

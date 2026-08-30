@@ -13,9 +13,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-# mlflow >=3 refuses filesystem tracking backends by default. Our default
-# tracking URI is `file:./experiments/mlruns` (per configs/*.yaml) — keep
-# that lightweight local-file workflow by opting in before mlflow is imported.
+# mlflow >=3 refuses filesystem tracking backends by default. Two paths:
+#   1. sqlite backend (preferred): `sqlite:///experiments/mlflow.db`. Native to
+#      mlflow >=2, survives major-version bumps, gives real query semantics.
+#   2. file backend (legacy): opt-in via MLFLOW_ALLOW_FILE_STORE=true.
+# We accept a `file:` URI when explicitly configured so old smoke runs keep
+# working, but the default in configs/*.yaml has moved to sqlite (P5 hygiene
+# fix; see docs/decisions.md).
 os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
 
 import mlflow  # noqa: E402  (needs the env var set first)

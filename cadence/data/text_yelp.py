@@ -121,3 +121,57 @@ def load_yelp_slices(
         )
 
     return _shuffle(early, f"yelp_early_{early_year_max}"), _shuffle(late, f"yelp_late_{late_year_min}")
+
+
+def load_yelp_domain_shift(
+    path: Path | str = DEFAULT_PATH,
+    *,
+    per_slice_cap: int = 10_000,
+    max_lines_scan: int = 500_000,
+    seed: int = 42,
+) -> tuple[YelpSlice, YelpSlice]:
+    """Deliberate domain shift — train on EXTREME reviews (stars ∈ {1, 5}),
+    stream on MARGINAL reviews (stars ∈ {2, 4}). Same binary sentiment
+    (2 → 0, 4 → 1, so we relabel here) but the model trained on 1★/5★
+    reviews has seen only vocabulary and phrasing from extreme opinions.
+
+    On 2★/4★ reviews the reviewer is much more measured ("okay but",
+    "decent, though") — vocabulary the classifier under-weighted. This
+    produces a measurable F1 drop on a shallow classifier, whereas the
+    naive year-based split we tried first did not.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Yelp review JSON not found at {path}.")
+
+    rng = np.random.default_rng(seed)
+    extreme: list[dict] = []
+    marginal: list[dict] = []
+    for r in _iter_reviews(path, max_lines=max_lines_scan):
+        stars = r.get("stars")
+        text = r.get("text")
+        date = r.get("date")
+        if not isinstance(text, str) or not text or stars is None or not isinstance(date, str):
+            continue
+        if stars in (1, 1.0) and len(extreme) < per_slice_cap:
+            extreme.append({"text": text, "y": 0, "date": date})
+        elif stars in (5, 5.0) and len(extreme) < per_slice_cap:
+            extreme.append({"text": text, "y": 1, "date": date})
+        elif stars in (2, 2.0) and len(marginal) < per_slice_cap:
+            marginal.append({"text": text, "y": 0, "date": date})
+        elif stars in (4, 4.0) and len(marginal) < per_slice_cap:
+            marginal.append({"text": text, "y": 1, "date": date})
+        if len(extreme) >= per_slice_cap and len(marginal) >= per_slice_cap:
+            break
+
+    def _shuffle(rows: list[dict], name: str) -> YelpSlice:
+        idx = rng.permutation(len(rows))
+        rows = [rows[i] for i in idx]
+        return YelpSlice(
+            name=name,
+            texts=[r["text"] for r in rows],
+            y=np.array([r["y"] for r in rows], dtype=np.int64),
+            dates=[r["date"] for r in rows],
+        )
+
+    return _shuffle(extreme, "yelp_extreme_1_5"), _shuffle(marginal, "yelp_marginal_2_4")

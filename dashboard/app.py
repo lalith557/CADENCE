@@ -120,18 +120,29 @@ def _f1_series_panel(summary: dict) -> None:
 
 def _cdag_panel(summary: dict) -> None:
     st.subheader("CDAG — causal graph over features + activation clusters")
-    # Try to synthesize a small display graph from the summary if it doesn't
-    # carry a CDAG directly. Most artifacts don't ship the raw weights matrix,
-    # so we build a lightweight illustrative graph from the top scored
-    # features and one performance node.
+
+    # NEW: prefer the raw NOTEARS edges from shd_rows (Step W-30 fix). If
+    # the summary lacks them (older artifacts), fall back to the illustrative
+    # layout so old smoke runs still open.
+    shd_rows = _pick_field(summary, ("shd_rows",)) or []
+    real_rows = [r for r in shd_rows if r.get("cdag_edges")]
+    if real_rows:
+        scenarios = sorted({r["scenario"] for r in real_rows})
+        sel_scen = st.selectbox("Scenario", scenarios, key="cdag_scen")
+        sel_rows = [r for r in real_rows if r["scenario"] == sel_scen]
+        seeds = sorted({r["seed"] for r in sel_rows})
+        sel_seed = st.selectbox("Seed", seeds, key="cdag_seed")
+        row = next(r for r in sel_rows if r["seed"] == sel_seed)
+        _render_real_cdag(row)
+        return
+
+    # Fallback: illustrative layout (W-30 legacy path).
     dataset = _pick_field(summary, ("dataset",))
     scenario = _pick_field(summary, ("scenario", "config", "eval_scenario"))
     n_feats = 30
     if isinstance(dataset, dict) and "n_features" in dataset:
         n_feats = int(dataset["n_features"])
     feat_names = [f"f{i}" for i in range(min(n_feats, 30))]
-    # Fake edge weights for display: top-1 -> performance edge strong,
-    # others weaker.
     labels = [*feat_names, "L1_c0", "L1_c1", "L2_c0", "performance"]
     xs = np.array(
         [np.cos(2 * np.pi * i / len(feat_names)) * 1.4 for i in range(len(feat_names))]
@@ -144,11 +155,7 @@ def _cdag_panel(summary: dict) -> None:
         dtype=float,
     )
     node_trace = go.Scatter(
-        x=xs,
-        y=ys,
-        mode="markers+text",
-        text=labels,
-        textposition="top center",
+        x=xs, y=ys, mode="markers+text", text=labels, textposition="top center",
         marker=dict(
             size=[16] * len(feat_names) + [22, 22, 22, 32],
             color=["#5aa6ff"] * len(feat_names) + ["#f6c85f", "#f6c85f", "#f6c85f", "#e64c4c"],
@@ -156,24 +163,7 @@ def _cdag_panel(summary: dict) -> None:
         ),
         hoverinfo="text",
     )
-    # A few illustrative edges: features → L1 clusters → L2 clusters → performance.
-    def _edge(x0, y0, x1, y1, w=1.0):
-        return go.Scatter(
-            x=[x0, x1, None],
-            y=[y0, y1, None],
-            mode="lines",
-            line=dict(width=1 + w * 3, color="rgba(120,120,120,0.6)"),
-            hoverinfo="none",
-        )
-
-    perf_idx = len(labels) - 1
-    edges = [
-        _edge(xs[0], ys[0], xs[perf_idx - 3], ys[perf_idx - 3], w=0.6),
-        _edge(xs[perf_idx - 3], ys[perf_idx - 3], xs[perf_idx - 1], ys[perf_idx - 1], w=0.6),
-        _edge(xs[perf_idx - 1], ys[perf_idx - 1], xs[perf_idx], ys[perf_idx], w=1.0),
-        _edge(xs[3], ys[3], xs[perf_idx - 2], ys[perf_idx - 2], w=0.4),
-    ]
-    fig = go.Figure(data=edges + [node_trace])
+    fig = go.Figure(data=[node_trace])
     fig.update_layout(
         showlegend=False,
         xaxis=dict(visible=False),
@@ -183,18 +173,121 @@ def _cdag_panel(summary: dict) -> None:
     )
     st.plotly_chart(fig, use_container_width=True)
     st.caption(
-        "Illustrative CDAG layout — the concrete NOTEARS-weighted DAG for "
-        "any window is available in the per-window `experiments/*.json` "
-        "artifacts; the exact edge weights aren't shipped in this summary."
+        "**Illustrative CDAG layout** — this artifact predates the W-30 fix "
+        "and doesn't ship the raw NOTEARS weights. Rerun `python -m benchmarks.phase_b_run "
+        "--out experiments/<name>.json` and reload."
         + (f"  Scenario: {scenario}" if scenario else "")
+    )
+
+
+def _render_real_cdag(row: dict) -> None:
+    """Render the actual NOTEARS-weighted DAG from a Phase-B shd_row entry."""
+    labels: list[str] = list(row.get("node_labels", []))
+    edges = row.get("cdag_edges", [])
+    perf_idx = int(row.get("performance_index", len(labels) - 1))
+    feat_idx = set(row.get("feature_indices", []))
+    gt = int(row.get("gt_idx", -1))
+    n = len(labels)
+    xs = np.zeros(n, dtype=float)
+    ys = np.zeros(n, dtype=float)
+    # Layout: features on the left ring, clusters in the middle, performance on
+    # the right.
+    ring_feats = [i for i in range(n) if i in feat_idx]
+    clusters = [i for i in range(n) if i not in feat_idx and i != perf_idx]
+    for k, i in enumerate(ring_feats):
+        angle = 2 * np.pi * k / max(len(ring_feats), 1)
+        xs[i] = -1.6 + 0.3 * np.cos(angle)
+        ys[i] = np.sin(angle) * 1.2
+    for k, i in enumerate(clusters):
+        xs[i] = 0.4 + 0.3 * ((k % 3) - 1)
+        ys[i] = 1.0 - 0.35 * (k // 3)
+    xs[perf_idx] = 1.8
+    ys[perf_idx] = 0.0
+    # Node colours: red = performance, gold = clusters, blue = features, cyan =
+    # ground-truth root cause feature (bigger + brighter).
+    colours = []
+    sizes = []
+    for i in range(n):
+        if i == perf_idx:
+            colours.append("#e64c4c"); sizes.append(28)
+        elif i == gt:
+            colours.append("#00c9c9"); sizes.append(26)
+        elif i in feat_idx:
+            colours.append("#5aa6ff"); sizes.append(14)
+        else:
+            colours.append("#f6c85f"); sizes.append(20)
+    node_trace = go.Scatter(
+        x=xs, y=ys, mode="markers+text", text=labels, textposition="top center",
+        marker=dict(size=sizes, color=colours, line=dict(width=1, color="#2d2d2d")),
+        hoverinfo="text",
+    )
+    edge_traces = []
+    if edges:
+        max_w = max(abs(float(e["w"])) for e in edges) or 1.0
+        for e in edges:
+            s, d = int(e["src"]), int(e["dst"])
+            w = abs(float(e["w"])) / max_w
+            edge_traces.append(
+                go.Scatter(
+                    x=[xs[s], xs[d], None],
+                    y=[ys[s], ys[d], None],
+                    mode="lines",
+                    line=dict(width=0.5 + w * 4, color="rgba(80,80,80,0.55)"),
+                    hoverinfo="none",
+                )
+            )
+    fig = go.Figure(data=edge_traces + [node_trace])
+    fig.update_layout(
+        showlegend=False,
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        height=440,
+        margin=dict(l=10, r=10, t=10, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption(
+        f"**Real CDAG.** {len(edges)} edges above 1e-3 · scenario "
+        f"`{row['scenario']}` · seed {row['seed']} · ground-truth root cause = "
+        f"`{labels[gt]}` (index {gt}) · SHD proxy = {row.get('shd_proxy', 'n/a')}"
     )
 
 
 def _responsibility_panel(summary: dict) -> None:
     st.subheader("Responsibility scores — which feature is driving the drop")
+
+    # Prefer the raw per-feature score vectors from shd_rows (W-30 fix).
+    shd_rows = _pick_field(summary, ("shd_rows",)) or []
+    scored_rows = [r for r in shd_rows if r.get("per_scorer_feature_scores")]
+    if scored_rows:
+        scenarios = sorted({r["scenario"] for r in scored_rows})
+        sel_scen = st.selectbox("Scenario", scenarios, key="resp_scen")
+        seeds = sorted({r["seed"] for r in scored_rows if r["scenario"] == sel_scen})
+        sel_seed = st.selectbox("Seed", seeds, key="resp_seed")
+        row = next(
+            r for r in scored_rows if r["scenario"] == sel_scen and r["seed"] == sel_seed
+        )
+        gt = int(row.get("gt_idx", -1))
+        labels = list(row.get("node_labels", []))
+        feat_indices = list(row.get("feature_indices", []))
+        feat_names = [labels[i] for i in feat_indices] if labels else [f"f{i}" for i in feat_indices]
+        for scorer_name, scores in row["per_scorer_feature_scores"].items():
+            df = pd.DataFrame({"feature": feat_names, "score": scores})
+            df = df.sort_values("score", ascending=False).head(10)
+            colour = ["#00c9c9" if f == labels[gt] else "#5aa6ff" for f in df["feature"]]
+            fig = go.Figure(
+                data=[go.Bar(x=df["feature"], y=df["score"], marker_color=colour)]
+            )
+            fig.update_layout(
+                title=f"{scorer_name} — top 10 (ground truth `{labels[gt]}` in teal)",
+                height=260,
+                margin=dict(l=40, r=20, t=30, b=40),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        return
+
+    # Fallback: older artifacts with a `rows` list of ranking metrics.
     rows = _pick_field(summary, ("rows",))
     if not rows:
-        # phase_e-style summary doesn't ship attribution rows.
         st.info(
             "This summary has no attribution rows. Load a `phase_b_smoke*.json` "
             "or `phase_c_smoke*.json` to see per-feature responsibility."
@@ -202,7 +295,6 @@ def _responsibility_panel(summary: dict) -> None:
         return
     df = pd.DataFrame(rows)
     if "scorer" in df.columns and "gt_idx" in df.columns:
-        # Show top-1 feature per (scorer, scenario) plus the ground-truth.
         pivot = (
             df.groupby(["scorer", "scenario"])
             .agg(mean_rank=("rank", "mean"), auroc=("auroc", "mean"))

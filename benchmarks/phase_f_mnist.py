@@ -116,8 +116,10 @@ def main(argv: list[str] | None = None) -> int:
 
     forgetting_partial: list[float] = []
     forgetting_full: list[float] = []
+    forgetting_full_with_replay: list[float] = []
     task_b_partial_f1: list[float] = []
     task_b_full_f1: list[float] = []
+    task_b_full_with_replay_f1: list[float] = []
     pre_task_a_f1_all: list[float] = []
 
     with start_run(cfg, run_name=f"phase_f_mnist_ta{args.task_a}_tb{args.task_b}"):
@@ -190,19 +192,39 @@ def main(argv: list[str] | None = None) -> int:
             )
             # Full retrain here is *only* on Task B (no replay of Task A) —
             # this is the strict "naive full retrain that ignores prior task"
-            # baseline the H3 test needs to isolate the value of EWC. If we
-            # let it see Task A via `historical_X`, we'd be conflating
-            # replay-buffer effects with EWC. Bypass the executor's replay
-            # concatenation by calling the adapter directly.
+            # baseline the H3 test needs to isolate the value of EWC.
             adapter_f.fit(task_b_train.X, task_b_train.y)
             post_full_task_a = _f1(adapter_f, task_a_test.X, task_a_test.y)
             post_full_task_b = _f1(adapter_f, task_b_test.X, task_b_test.y)
             forget_f = pre_task_a_f1 - post_full_task_a
 
+            # ---------- Path C (fairer): FULL WITH REPLAY on Task B + sampled Task A ----------
+            # A reviewer will ask: "the naive full baseline is a straw man; what if you
+            # give it replay of Task A?" This path answers that: no EWC, no layer freezing,
+            # but the training set is Task B + a Task-A replay buffer sized to match
+            # `replay_ratio_new` from ExecutorConfig defaults.
+            adapter_r = adapter.clone()
+            adapter_r.load_state_dict(baseline_state)
+            adapter_r.decision_threshold = baseline_threshold
+            replay_n = min(
+                task_a_train.X.shape[0], int(0.3 / 0.7 * task_b_train.X.shape[0])
+            )
+            replay_idx = np.random.default_rng(seed).integers(
+                0, task_a_train.X.shape[0], size=replay_n
+            )
+            X_ft = np.concatenate([task_b_train.X, task_a_train.X[replay_idx]], axis=0)
+            y_ft = np.concatenate([task_b_train.y, task_a_train.y[replay_idx]], axis=0)
+            adapter_r.fit(X_ft, y_ft)
+            post_full_replay_task_a = _f1(adapter_r, task_a_test.X, task_a_test.y)
+            post_full_replay_task_b = _f1(adapter_r, task_b_test.X, task_b_test.y)
+            forget_fr = pre_task_a_f1 - post_full_replay_task_a
+
             forgetting_partial.append(forget_p)
             forgetting_full.append(forget_f)
+            forgetting_full_with_replay.append(forget_fr)
             task_b_partial_f1.append(post_partial_task_b)
             task_b_full_f1.append(post_full_task_b)
+            task_b_full_with_replay_f1.append(post_full_replay_task_b)
             log.info(
                 "seed_done",
                 seed=seed,
@@ -218,23 +240,20 @@ def main(argv: list[str] | None = None) -> int:
             mlflow.log_metric(f"forget_partial_seed{seed}", forget_p)
             mlflow.log_metric(f"forget_full_seed{seed}", forget_f)
 
-            del adapter, adapter_p, adapter_f, exec_p, exec_f
+            del adapter, adapter_p, adapter_f, adapter_r, exec_p, exec_f
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        try:
-            stat, p_val = sci_stats.wilcoxon(
-                forgetting_partial, forgetting_full, alternative="less"
-            )
-            wilcoxon = {"stat": float(stat), "p": float(p_val), "n_pairs": len(forgetting_partial)}
-        except ValueError as e:
-            wilcoxon = {
-                "stat": None,
-                "p": None,
-                "err": str(e),
-                "n_pairs": len(forgetting_partial),
-            }
+        def _wilcoxon_less(a: list[float], b: list[float]) -> dict:
+            try:
+                stat, p_val = sci_stats.wilcoxon(a, b, alternative="less")
+                return {"stat": float(stat), "p": float(p_val), "n_pairs": len(a)}
+            except ValueError as e:
+                return {"stat": None, "p": None, "err": str(e), "n_pairs": len(a)}
+
+        wilcoxon = _wilcoxon_less(forgetting_partial, forgetting_full)
+        wilcoxon_vs_replay = _wilcoxon_less(forgetting_partial, forgetting_full_with_replay)
 
         summary = {
             "task_a": list(args.task_a),
@@ -252,9 +271,16 @@ def main(argv: list[str] | None = None) -> int:
                 "std": _mean_std(forgetting_full)[1],
                 "values": forgetting_full,
             },
+            "forgetting_full_with_replay": {
+                "mean": _mean_std(forgetting_full_with_replay)[0],
+                "std": _mean_std(forgetting_full_with_replay)[1],
+                "values": forgetting_full_with_replay,
+            },
             "task_b_partial_f1": _mean_std(task_b_partial_f1),
             "task_b_full_f1": _mean_std(task_b_full_f1),
+            "task_b_full_with_replay_f1": _mean_std(task_b_full_with_replay_f1),
             "wilcoxon_partial_less_full": wilcoxon,
+            "wilcoxon_partial_less_full_with_replay": wilcoxon_vs_replay,
             "config": vars(args),
         }
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -268,6 +294,19 @@ def main(argv: list[str] | None = None) -> int:
 
         print(f"\n=== Gate F (MNIST H3): Task A={args.task_a} -> Task B={args.task_b} ===")
         print(f"Pre Task A F1: {summary['pre_task_a_f1'][0]:.4f} +/- {summary['pre_task_a_f1'][1]:.4f}")
+        print(
+            f"Forgetting (full+replay): {summary['forgetting_full_with_replay']['mean']:+.4f} "
+            f"+/- {summary['forgetting_full_with_replay']['std']:.4f}"
+        )
+        print(
+            f"Task B F1 (full+replay):  {summary['task_b_full_with_replay_f1'][0]:.4f} "
+            f"+/- {summary['task_b_full_with_replay_f1'][1]:.4f}"
+        )
+        print(
+            f"Wilcoxon partial<full_with_replay: stat={wilcoxon_vs_replay.get('stat')} "
+            f"p={wilcoxon_vs_replay.get('p')}  n_pairs={wilcoxon_vs_replay.get('n_pairs')}"
+        )
+        print("---")
         print(
             f"Forgetting (partial): {summary['forgetting_partial']['mean']:+.4f} "
             f"+/- {summary['forgetting_partial']['std']:.4f}"

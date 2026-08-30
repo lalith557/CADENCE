@@ -36,7 +36,7 @@ from cadence.common.config import load_config
 from cadence.common.logging import get_logger
 from cadence.common.seeds import set_global_seed
 from cadence.common.tracking import start_run
-from cadence.data.text_yelp import load_yelp_slices
+from cadence.data.text_yelp import load_yelp_domain_shift, load_yelp_slices
 from cadence.executor import (
     EscalationConfig,
     EscalationDecision,
@@ -208,6 +208,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seeds", type=int, default=2)
     p.add_argument("--per-slice-cap", type=int, default=8_000)
     p.add_argument("--max-lines-scan", type=int, default=300_000)
+    p.add_argument(
+        "--split",
+        choices=["temporal", "domain"],
+        default="temporal",
+        help="temporal = early (<=2013) vs late (>=2018); domain = extreme (1/5★) vs marginal (2/4★)",
+    )
     p.add_argument("--window-size", type=int, default=800)
     p.add_argument("--n-windows", type=int, default=8)
     p.add_argument("--sla", type=float, default=0.85)
@@ -221,11 +227,16 @@ def main(argv: list[str] | None = None) -> int:
         "phase_f_text_start", seeds=args.seeds, per_slice_cap=args.per_slice_cap
     )
 
-    early, late = load_yelp_slices(
-        per_slice_cap=args.per_slice_cap, max_lines_scan=args.max_lines_scan
-    )
-    log.info("yelp_early", **early.summary())
-    log.info("yelp_late", **late.summary())
+    if args.split == "domain":
+        early, late = load_yelp_domain_shift(
+            per_slice_cap=args.per_slice_cap, max_lines_scan=args.max_lines_scan
+        )
+    else:
+        early, late = load_yelp_slices(
+            per_slice_cap=args.per_slice_cap, max_lines_scan=args.max_lines_scan
+        )
+    log.info("yelp_early_or_extreme", **early.summary())
+    log.info("yelp_late_or_marginal", **late.summary())
 
     # Pretrain once (seed=42): train on early slice.
     set_global_seed(42)

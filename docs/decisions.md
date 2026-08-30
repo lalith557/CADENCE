@@ -112,6 +112,14 @@ Every real design decision lives here. Format per entry:
 - **Reversibility:** Costly — bumping Python later would rebuild the pinned lockfile.
 - **Affects:** All modules; the CI matrix pins 3.10.
 
+### D-18: Narrow Claim A's wording to the "unified feature + activation-cluster graph" construction   (2026-08-30)
+- **Context:** Prior-art second-pass (W-4 close-out) surfaced ECMLPKDD TempXAI 2025 "Causal Explanation of Concept Drift" and arxiv 2510.23528 "Tracing Distribution Shifts with Causal System Maps" as adjacent works that likely occupy the generic "causal graph for drift explanation" space. Broadly-worded Claim A would collide.
+- **Decision:** Wording of Claim A tightens to require the specific technical construction: nodes include BOTH external feature nodes AND internal activation-cluster nodes (from a k-means over layer activations), in ONE incrementally-updated graph, feeding an attribution scorer whose output drives a retrain-scope decision.
+- **Why:** None of the search-tier hits demonstrably build a graph over activation-cluster nodes and use it to *decide* retrain scope. The narrowed language survives even if the generic "causal graph over drift" claim is fully occupied by concurrent 2025 work.
+- **Alternatives considered:** Keep the broader wording and hope the ECMLPKDD/arxiv works only cover feature-space graphs — rejected as too optimistic without deep-reading them.
+- **Reversibility:** Cheap — only affects paper method-section wording and patent claim language, not code.
+- **Affects:** Patent claim breadth; paper's method framing.
+
 ### D-17: Narrow Claim B to a strict dependent of Claim A, in response to prior-art findings   (2026-08-28)
 - **Context:** First-pass prior-art search (W-4) found GNN+causal-graph uplift papers (arxiv 2311.08434, 2403.06489) and long-term latent-surrogate work (ScienceDirect 2024) that share Claim B's technical construction (graph node → treatment-effect estimate via learned surrogate) even though their applications differ (marketing uplift, long-horizon RCTs). Broadly-worded Claim B would collide.
 - **Decision:** Rewrite Claim B as a dependent claim of A, requiring ALL of:

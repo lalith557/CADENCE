@@ -313,8 +313,35 @@ def main(argv: list[str] | None = None) -> int:
                     notears_max_iter=25,
                 )
                 shd = _shd_gt_feature_edge(cdag.weights, gnn_scorer.node_set, gt_idx)
+                # Serialise the raw CDAG edges + per-scorer per-feature scores
+                # so the dashboard (W-30) can render the actual graph and the
+                # actual attribution, not a placeholder.
+                W = np.asarray(cdag.weights, dtype=np.float64)
+                # Keep only above-noise-floor edges to keep the JSON small.
+                src, dst = np.where(np.abs(W) >= 1e-3)
+                cdag_edges = [
+                    {"src": int(s), "dst": int(d), "w": float(W[s, d])}
+                    for s, d in zip(src, dst, strict=True)
+                    if s != d
+                ]
                 shd_rows.append(
-                    {"scenario": scenario.name, "seed": seed, "shd_proxy": shd, "gt_idx": gt_idx}
+                    {
+                        "scenario": scenario.name,
+                        "seed": seed,
+                        "shd_proxy": shd,
+                        "gt_idx": gt_idx,
+                        "cdag_edges": cdag_edges,
+                        "node_labels": [
+                            spec.name for spec in gnn_scorer.node_set.specs
+                        ],
+                        "feature_indices": list(gnn_scorer.node_set.feature_indices),
+                        "performance_index": int(gnn_scorer.node_set.performance_index),
+                        "per_scorer_feature_scores": {
+                            "psi_stub": [float(x) for x in psi_scores],
+                            "cdag_structural": [float(x) for x in cdag_scores],
+                            "gnn_learned": [float(x) for x in gnn_scores],
+                        },
+                    }
                 )
 
                 for scorer_name, scores in (

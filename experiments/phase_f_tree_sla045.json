@@ -1,0 +1,72 @@
+{
+  "adapter_family": "tree_lightgbm",
+  "dataset": {
+    "name": "give_me_some_credit",
+    "n_train": 120000,
+    "n_test": 30000,
+    "n_features": 10,
+    "positive_rate_train": 0.06684166666666666,
+    "positive_rate_test": 0.06683333333333333,
+    "task": "binary_classification"
+  },
+  "baseline_pretrain_f1": 0.4709897610921502,
+  "scenario": "gmsc_debt_ratio_x2",
+  "aggregates": {
+    "cadence_rule": {
+      "n_seeds": 5,
+      "mean_f1": [
+        0.44645794447126663,
+        0.0
+      ],
+      "min_f1": [
+        0.4,
+        0.0
+      ],
+      "actions_full": 3.0,
+      "actions_partial": 0.0,
+      "actions_noop": 3.0,
+      "rollbacks_mean": 2.0
+    },
+    "periodic": {
+      "n_seeds": 5,
+      "mean_f1": [
+        0.4435994862370863,
+        0.0
+      ],
+      "min_f1": [
+        0.40540540540540543,
+        0.0
+      ],
+      "actions_full": 2.0,
+      "actions_partial": 0.0,
+      "actions_noop": 4.0,
+      "rollbacks_mean": 1.0
+    },
+    "reactive_full": {
+      "n_seeds": 5,
+      "mean_f1": [
+        0.43974886307206307,
+        0.0
+      ],
+      "min_f1": [
+        0.3953488372093023,
+        0.0
+      ],
+      "actions_full": 6.0,
+      "actions_partial": 0.0,
+      "actions_noop": 0.0,
+      "rollbacks_mean": 2.0
+    }
+  },
+  "config": {
+    "config": "configs/default.yaml",
+    "seeds": 5,
+    "window_size": 1024,
+    "n_windows": 6,
+    "sla": 0.45,
+    "periodic_period": 3,
+    "fullretrain_epochs": 100,
+    "out": "experiments/phase_f_tree_sla045.json",
+    "n_estimators": 100
+  }
+}
