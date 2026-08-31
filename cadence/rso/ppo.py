@@ -30,7 +30,7 @@ import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 from cadence.common.logging import get_logger
 from cadence.rso.env import RetrainingSandboxEnv, SandboxConfig
@@ -89,8 +89,22 @@ def train_ppo(
     cfg: PPOTrainConfig | None = None,
     save_path: Path | None = None,
     check_env_first: bool = True,
+    normalize: bool = True,
+    normalize_clip_obs: float = 10.0,
+    normalize_gamma: float | None = None,
 ) -> PPO:
-    """Train PPO on the given env factory. Returns the trained model."""
+    """Train PPO on the given env factory. Returns the trained model.
+
+    W-34 (docs/gate_a_audit.md §1.3): the raw observation vector spans
+    [0, 10000] (hours_since_retrain) and [0, 2000] (grid intensity)
+    alongside [0, 1] scores. A vanilla MlpPolicy without observation
+    normalization is dominated by the largest-magnitude features and
+    cannot learn the score / F1 signal.
+
+    `normalize=True` (default) wraps the vec-env in `VecNormalize` with
+    running-mean/variance stats for both obs and reward. Set to False
+    to reproduce the pre-fix pathology for ablations.
+    """
     cfg = cfg or PPOTrainConfig()
     single_env = env_factory()
     if check_env_first:
@@ -100,6 +114,14 @@ def train_ppo(
         return env_factory()
 
     vec_env = DummyVecEnv([_make])
+    if normalize:
+        vec_env = VecNormalize(
+            vec_env,
+            norm_obs=True,
+            norm_reward=True,
+            clip_obs=normalize_clip_obs,
+            gamma=normalize_gamma if normalize_gamma is not None else cfg.gamma,
+        )
     model = PPO(
         cfg.policy,
         vec_env,
@@ -130,6 +152,14 @@ def train_ppo(
         save_path.parent.mkdir(parents=True, exist_ok=True)
         model.save(str(save_path))
         log.info("ppo_saved", path=str(save_path))
+        # W-34: save the VecNormalize stats alongside the checkpoint so
+        # inference uses the same normalization the policy was trained
+        # against. Without this, the policy sees different obs
+        # distributions at eval and its actions drift.
+        if normalize:
+            norm_path = save_path.with_suffix(".vecnorm.pkl")
+            model.get_vec_normalize_env().save(str(norm_path))
+            log.info("vecnorm_saved", path=str(norm_path))
     return model
 
 
