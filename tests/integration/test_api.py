@@ -110,3 +110,32 @@ def test_score_fails_when_adapter_unloaded(client: TestClient) -> None:
     STATE.adapter = None
     r = client.post("/score", json={"rows": [[0.0, 0.0, 0.0, 0.0]]})
     assert r.status_code == 503
+
+
+@pytest.mark.slow
+def test_decide_uses_learned_policy_when_checkpoint_loaded(client: TestClient) -> None:
+    """When a real PPO checkpoint is loaded, /decide's `reason` must say so."""
+    from pathlib import Path
+
+    ckpt = Path("experiments/rso_ppo_phase_a.zip")
+    if not ckpt.exists():
+        pytest.skip("no PPO checkpoint on disk")
+    try:
+        from stable_baselines3 import PPO
+
+        STATE.policy = PPO.load(str(ckpt), custom_objects={"lr_schedule": lambda _: 0.0})
+        STATE.checkpoint_path = str(ckpt)
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"PPO load failed: {e}")
+
+    # Match the 4-feature trigger baseline from _prep_state().
+    rng = np.random.default_rng(2)
+    live = rng.standard_normal((256, 4)).astype(np.float32)
+    live[:, 0] = live[:, 0] * 3.0 + 4.0  # force drift on feature 0
+    y = (rng.random(256) < 0.5).astype(int).tolist()
+    r = client.post("/decide", json={"rows": live.tolist(), "y": y, "sla_target": 0.70})
+    assert r.status_code == 200
+    body = r.json()
+    # This is the load-bearing assertion: the policy must have been consulted.
+    assert body["reason"] == "learned PPO policy"
+    assert body["action"] in {"no-op", "partial", "full"}
