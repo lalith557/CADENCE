@@ -107,6 +107,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--train-only", action="store_true",
                    help="Train PPO + save checkpoint, then skip the (expensive) eval loop. "
                         "Used to close W-28 without waiting for paper-fidelity baselines.")
+    p.add_argument(
+        "--per-seed-policies",
+        action="store_true",
+        help="W-36 fix: train an independent PPO policy per seed inside the seed loop. "
+             "Default off preserves legacy behaviour (single seed=42 policy shared "
+             "across the eval seed loop = pseudoreplication). Turn on for any run "
+             "whose numbers feed a statistical claim.",
+    )
     p.add_argument("--out", default="experiments/phase_a_summary.json")
     args = p.parse_args(argv)
 
@@ -220,17 +228,30 @@ def main(argv: list[str] | None = None) -> int:
             env = base_factory()
             return AugmentedLagrangianEnv(env, cfg=dual_cfg)
 
-        model = train_ppo(
-            _wrapped_factory,
-            cfg=PPOTrainConfig(
-                total_timesteps=args.train_timesteps,
-                seed=42,
-                verbose=0,
-            ),
-            save_path=Path("experiments") / "rso_ppo_phase_a.zip",
-            check_env_first=False,
-        )
-        log.info("ppo_ready")
+        # W-36 fix (docs/gate_a_audit.md §1.5). Under --per-seed-policies,
+        # a distinct PPO is trained per seed in the eval loop below and
+        # this "shared policy" step is skipped. Legacy behavior (single
+        # policy at seed=42) preserved for reproducing R-4 / R-Gate-A-w28
+        # numbers.
+        model = None
+        if not args.per_seed_policies:
+            model = train_ppo(
+                _wrapped_factory,
+                cfg=PPOTrainConfig(
+                    total_timesteps=args.train_timesteps,
+                    seed=42,
+                    verbose=0,
+                ),
+                save_path=Path("experiments") / "rso_ppo_phase_a.zip",
+                check_env_first=False,
+            )
+            log.info("ppo_ready", per_seed_policies=False)
+        else:
+            log.info(
+                "ppo_deferred_per_seed",
+                per_seed_policies=True,
+                reason="each seed will train its own policy inside the eval loop",
+            )
 
         if args.train_only:
             # W-28 close-out: we just need a 15-d obs checkpoint on disk.
@@ -311,6 +332,23 @@ def main(argv: list[str] | None = None) -> int:
 
             for seed in range(args.seeds):
                 set_global_seed(seed)
+                # W-36 fix: under --per-seed-policies, train a fresh policy
+                # with `PPOTrainConfig(seed=seed)`. This is the honest
+                # independent-seed protocol for statistical claims (Gate A
+                # protocol §13). Runtime scales linearly with args.seeds.
+                if args.per_seed_policies:
+                    seed_ckpt = Path("experiments") / f"rso_ppo_phase_a_seed{seed}.zip"
+                    model = train_ppo(
+                        _wrapped_factory,
+                        cfg=PPOTrainConfig(
+                            total_timesteps=args.train_timesteps,
+                            seed=seed,
+                            verbose=0,
+                        ),
+                        save_path=seed_ckpt,
+                        check_env_first=False,
+                    )
+                    log.info("per_seed_ppo_ready", seed=seed, ckpt=str(seed_ckpt))
                 stream_pair = make_baseline_stream(X_stream, y_stream, scenario, seed=seed)
                 eval_stream_X, eval_stream_y = stream_pair[0], stream_pair[1]
                 fresh_adapter = adapter.clone()
