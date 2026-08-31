@@ -51,6 +51,14 @@ class PPOTrainConfig:
     policy: str = "MlpPolicy"
     seed: int = 42
     verbose: int = 0
+    # W-33 (docs/gate_a_audit.md §1.2). SB3's default ent_coef is 0.0,
+    # which collapses PPO to a deterministic policy on a Discrete(3)
+    # action space almost immediately — the "bang-bang" pathology in
+    # R-4b's 3×3 sweep. A small positive value preserves exploration
+    # long enough for the policy to learn a state-conditional
+    # (mixed) strategy. 0.01 is the SB3 recipe recommendation for
+    # small-action-space discrete PPO.
+    ent_coef: float = 0.01
 
 
 class MLflowCallback(BaseCallback):
@@ -102,6 +110,7 @@ def train_ppo(
         gamma=cfg.gamma,
         gae_lambda=cfg.gae_lambda,
         n_epochs=cfg.n_epochs,
+        ent_coef=cfg.ent_coef,  # W-33 fix
         seed=cfg.seed,
         verbose=cfg.verbose,
     )
