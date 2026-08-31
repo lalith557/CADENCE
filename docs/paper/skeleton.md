@@ -197,7 +197,7 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Artifacts referenced.**
 - `experiments/phase_c_smoke2.json`
 
-**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+![Gate-C](figures/surrogate_calibration.png)
 
 ---
 
@@ -240,7 +240,7 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 - `experiments/phase_e_elec2.json`
 - `experiments/phase_e_airlines.json`
 
-**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+![Gate-E](figures/elec2_f1_over_time.png)
 
 ---
 
@@ -276,7 +276,7 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 - `experiments/phase_f_mnist.json`
 - `experiments/phase_f_robustness.json`
 
-**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+![Gate-F](figures/robustness_edge_dropout.png)
 
 ---
 
@@ -336,7 +336,7 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Artifacts referenced.**
 - `experiments/phase_b_n10.json`
 
-**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+![Gate-B-n10](figures/h1_scorer_comparison.png)
 
 ---
 
@@ -354,7 +354,7 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Artifacts referenced.**
 - `experiments/phase_f_tree_sla045.json`
 
-**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+![Gate-F-tree-sla045](figures/tree_pareto_frontier.png)
 
 ---
 
@@ -388,7 +388,7 @@ _No tables extracted — see the raw entry in `docs/results.md`._
 **Artifacts referenced.**
 - `experiments/phase_f_mnist_n10.json`
 
-**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._
+![Gate-F-mnist-n10](figures/h3_split_mnist_forgetting.png)
 
 ---
 

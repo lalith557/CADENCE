@@ -132,5 +132,63 @@ def smoke(config_path: str) -> None:
     log.info("smoke_run_ok")
 
 
+@main.command("api")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8000, show_default=True, type=int)
+@click.option(
+    "--config",
+    "-c",
+    "config_path",
+    default="configs/default.yaml",
+    show_default=True,
+    help="Config used by bootstrap_from_config to seed the API's adapter + trigger + policy.",
+)
+@click.option(
+    "--no-bootstrap",
+    is_flag=True,
+    help="Skip bootstrap_from_config; start with a bare API (client must POST /admin/reload).",
+)
+def api(host: str, port: int, config_path: str, no_bootstrap: bool) -> None:
+    """Run the FastAPI service (cadence.api.server) via uvicorn."""
+    import uvicorn
+
+    from cadence.api.server import app, bootstrap_from_config
+
+    log = get_logger("cadence.cli")
+    if not no_bootstrap:
+        log.info("api_bootstrap_start", config=config_path)
+        bootstrap_from_config(config_path)
+        log.info("api_bootstrap_done")
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
+@main.command("dashboard")
+@click.option("--port", default=8501, show_default=True, type=int)
+@click.option("--host", default="127.0.0.1", show_default=True)
+def dashboard(port: int, host: str) -> None:
+    """Launch the Streamlit dashboard (dashboard/app.py)."""
+    import subprocess
+    import sys
+
+    dash_path = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
+    if not dash_path.exists():
+        raise click.ClickException(f"dashboard/app.py not found at {dash_path}")
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(dash_path),
+        "--server.address",
+        host,
+        "--server.port",
+        str(port),
+        "--server.headless",
+        "true",
+    ]
+    click.echo(f"launching: {' '.join(cmd)}")
+    subprocess.run(cmd, check=False)
+
+
 if __name__ == "__main__":
     main()

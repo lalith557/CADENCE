@@ -127,7 +127,7 @@ def _extract_tables(body: str) -> list[str]:
     return unique
 
 
-def _render(entries: list[dict], src_path: Path) -> str:
+def _render(entries: list[dict], src_path: Path, dst: Path = DEFAULT_OUT) -> str:
     lines: list[str] = [
         "# CADENCE — Paper Skeleton (auto-generated appendix)",
         "",
@@ -170,8 +170,25 @@ def _render(entries: list[dict], src_path: Path) -> str:
             for a in e["artifacts"]:
                 lines.append(f"- `{a}`")
             lines.append("")
-        lines.append("**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._")
-        lines.append("")
+        # Auto-link figure(s) if one exists whose stem matches an obvious
+        # keyword in the entry title. Cheap heuristic; misses are okay.
+        fig_map = {
+            "R-Gate-B-n10": "h1_scorer_comparison.png",
+            "R-Gate-F-mnist-n10": "h3_split_mnist_forgetting.png",
+            "R-Gate-E": "elec2_f1_over_time.png",
+            "R-Gate-F-tree-sla045": "tree_pareto_frontier.png",
+            "R-Gate-F": "robustness_edge_dropout.png",
+            "R-Gate-C": "surrogate_calibration.png",
+        }
+        fig_name = fig_map.get(f"R-{e['tag']}")
+        fig_path = ROOT / "docs" / "paper" / "figures" / fig_name if fig_name else None
+        if fig_path and fig_path.exists():
+            rel = fig_path.relative_to(ROOT).as_posix()
+            lines.append(f"![{e['tag']}]({fig_path.relative_to(dst.parent).as_posix()})")
+            lines.append("")
+        else:
+            lines.append("**Figure placeholder.** _TODO: insert plot referencing this entry's `experiments/*.json` artifact._")
+            lines.append("")
         lines.append("---")
         lines.append("")
     return "\n".join(lines)
@@ -189,7 +206,7 @@ def main() -> int:
     entries = _extract_sections(text)
     # Filter to real R-entries (skip the template placeholder like R-<n>).
     entries = [e for e in entries if not e["tag"].startswith("<")]
-    md = _render(entries, src)
+    md = _render(entries, src, dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(md, encoding="utf-8")
     print(f"wrote {dst.relative_to(ROOT)}  ({len(entries)} R-entries, {sum(len(e['tables']) for e in entries)} tables)")
