@@ -68,6 +68,16 @@ class SandboxConfig:
     fullretrain_epochs: int = 15
     replay_buffer_size: int = 5000
     replay_ratio_new: float = 0.7
+    # W-32 fix (see docs/gate_a_audit.md §1.1). FraudNet's flops_per_forward
+    # is ~4100, so estimate_cost() returns GPU-seconds in the 1e-6..1e-4
+    # range and kg_CO2 in the 1e-11..1e-8 range. Multiplied by the tiny
+    # w_gpu_hr / w_kg_co2 weights, the cost penalty was ~1e-10 while Δf1
+    # and the SLA penalty were ~1e-1 — a 9-order-of-magnitude gap that made
+    # the cost gradient invisible to PPO. `cost_scale` rescales the applied
+    # penalty so that a full retrain lands around 0.001-0.01 F1-points of
+    # penalty, comparable to a real Δf1. Default 1e7 was empirically
+    # verified in tests/unit/test_rso_audit.py.
+    cost_scale: float = 1e7
     # EWC controls the partial-retrain path so it matches Part 3B mechanics.
     # Zero disables (matches the pre-Step-A sandbox behaviour used by R-4).
     ewc_penalty: float = 1000.0
@@ -206,15 +216,16 @@ class RetrainingSandboxEnv(gym.Env):
         self._hours_since_retrain += 1.0
         self._windows_since_alert += 1
 
-        # Reward per D-7.
+        # Reward per D-7, with W-32 cost rescaling.
         delta_f1 = post_f1 - pre_f1
         sla_penalty = max(0.0, self.cfg.sla_target - post_f1)
-        reward = (
-            delta_f1
-            - self.cfg.w_gpu_hr * cost_gpu_hr
-            - self.cfg.w_kg_co2 * cost_kg_co2
-            - self.cfg.lambda_sla * sla_penalty
+        # `cost_scale` puts the compute + carbon penalty in the same order
+        # as Δf1 so PPO's gradient actually sees the cost signal. See
+        # docs/gate_a_audit.md §1.1.
+        cost_penalty = self.cfg.cost_scale * (
+            self.cfg.w_gpu_hr * cost_gpu_hr + self.cfg.w_kg_co2 * cost_kg_co2
         )
+        reward = delta_f1 - cost_penalty - self.cfg.lambda_sla * sla_penalty
 
         terminated = post_f1 >= self.cfg.sla_target
         truncated = self._windows_since_alert >= self.cfg.max_windows_per_episode
