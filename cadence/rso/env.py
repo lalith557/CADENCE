@@ -216,17 +216,35 @@ class RetrainingSandboxEnv(gym.Env):
             self._hours_since_retrain = 0.0
             log.info("action_full", **cost.__dict__)
 
-        post_f1 = self._eval_f1_on_last_window()
+        # In-sample F1 on the SAME window the retrain fit (used for the
+        # `post_f1` info field and legacy comparisons).
+        in_sample_post_f1 = self._eval_f1_on_last_window()
+
+        # W-35 (docs/gate_a_audit.md §1.4): the honest reward measures F1
+        # on the NEXT window (prequential / test-then-train). This
+        # matches what `evaluate_ppo` reports and kills the ~15%
+        # in-sample optimism from single-window overfitting.
+        reward_window_X, reward_window_y = self._peek_next_window()
+        if reward_window_X.size == 0:
+            # End of stream — no fresh window to score reward against.
+            # Fall back to in-sample so the episode still terminates cleanly.
+            reward_window_f1 = in_sample_post_f1
+        else:
+            saved_last_X, saved_last_y = self._last_window_X, self._last_window_y
+            self._last_window_X = reward_window_X
+            self._last_window_y = reward_window_y
+            reward_window_f1 = self._eval_f1_on_last_window()
+            self._last_window_X, self._last_window_y = saved_last_X, saved_last_y
+
+        # Use the prequential F1 for the reward + termination.
+        post_f1 = reward_window_f1
         self._current_f1 = post_f1
         self._hours_since_retrain += 1.0
         self._windows_since_alert += 1
 
-        # Reward per D-7, with W-32 cost rescaling.
+        # Reward per D-7, with W-32 cost rescaling and W-35 prequential F1.
         delta_f1 = post_f1 - pre_f1
         sla_penalty = max(0.0, self.cfg.sla_target - post_f1)
-        # `cost_scale` puts the compute + carbon penalty in the same order
-        # as Δf1 so PPO's gradient actually sees the cost signal. See
-        # docs/gate_a_audit.md §1.1.
         cost_penalty = self.cfg.cost_scale * (
             self.cfg.w_gpu_hr * cost_gpu_hr + self.cfg.w_kg_co2 * cost_kg_co2
         )
@@ -242,12 +260,27 @@ class RetrainingSandboxEnv(gym.Env):
             bool(terminated),
             bool(truncated),
             {
-                "post_f1": post_f1,
+                "post_f1": in_sample_post_f1,  # legacy field; in-sample
+                "reward_window_f1": float(reward_window_f1),  # W-35: honest
+                "prequential": True,  # W-35 flag
                 "pre_f1": pre_f1,
                 "cost_gpu_hr": cost_gpu_hr,
                 "cost_kg_co2": cost_kg_co2,
             },
         )
+
+    def _peek_next_window(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return the NEXT window in the stream without advancing the
+        cursor. Used by the prequential reward (W-35 fix): the retrain
+        step's F1 is measured on data the retrain has never seen.
+        """
+        end = min(self._cursor + self.cfg.window_size, self.stream_X.shape[0])
+        if end <= self._cursor:
+            return (
+                np.zeros((0, self.stream_X.shape[1]), dtype=self.stream_X.dtype),
+                np.zeros((0,), dtype=self.stream_y.dtype),
+            )
+        return self.stream_X[self._cursor : end], self.stream_y[self._cursor : end]
 
     # ---- internals ----
 
