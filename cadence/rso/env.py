@@ -144,6 +144,11 @@ class RetrainingSandboxEnv(gym.Env):
         # Attribution concentration (Herfindahl over responsibility scores)
         # is part of the enriched state vector, populated in step()/reset().
         self._last_attribution_concentration: float = 0.0
+        # W-37 fix (docs/gate_a_audit.md §1.6): replay RNG on the env
+        # instance, not `np.random.default_rng(0)` fresh each call. Prior
+        # code drew identical replay indices every partial-retrain call,
+        # making the replay buffer a deterministic constant.
+        self._replay_rng = np.random.default_rng()
 
     # ---- gym API ----
 
@@ -262,7 +267,9 @@ class RetrainingSandboxEnv(gym.Env):
         self, window_X: np.ndarray, window_y: np.ndarray, *, target_layer: str
     ) -> None:
         replay_n = int(self.cfg.replay_buffer_size * (1 - self.cfg.replay_ratio_new))
-        replay_idx = np.random.default_rng(0).integers(0, self.historical_X.shape[0], size=replay_n)
+        # W-37 fix: draw from the env's own RNG so consecutive partial
+        # retrains sample different rows.
+        replay_idx = self._replay_rng.integers(0, self.historical_X.shape[0], size=replay_n)
         replay_X = self.historical_X[replay_idx]
         replay_y = self.historical_y[replay_idx]
 
