@@ -90,22 +90,25 @@ high-risk and recommends narrowing to a dependent claim of A.
 ### Candidate hits
 
 - **Uplift Modeling based on GNN Combined with Causal Knowledge** (arxiv
-  2311.08434, 2024) — https://arxiv.org/pdf/2311.08434
-  **⚠️** — combines GNNs with causal graphs for uplift estimation. This is
-  closer to Claim B than the reference brief anticipated. If they explicitly
-  cover "intervention on a node in a causal graph → outcome delta," a broadly-
-  written Claim B collides.
-  **Mitigation done in D-17**: narrow Claim B to a dependent claim of A that
-  requires (1) the graph's nodes span external features AND internal activation
-  clusters, (2) the surrogate is trained on `(CDAG-node, intervention-type,
-  measured post-fix F1)` triples from a sandbox, (3) the intervention set is
-  `{no-op, partial-subnetwork, full}`. The (node type × training-signal source ×
-  intervention set) triple survives even under a collision on the general
-  "GNN + uplift" plumbing.
+  2311.08434, 2024) — https://arxiv.org/abs/2311.08434
+  **✅ deep-read complete 2026-09-03 (WebFetch on abs page).** Non-blocking.
+  Verdict: (a) marketing-uplift task; (b) graph nodes = external client
+  features only, no internal-activation nodes; (c) outcome = marketing
+  conversion / client decision, not classifier F1; (d) intervention set =
+  marketing treatments (which offer to present), no retraining anywhere;
+  (e) domain = industry marketing data. Fundamentally different problem
+  from CADENCE — the (node type × outcome × intervention set) triple all
+  three axes differ. Claim B as narrowed in D-17/D-18 does not collide.
 
 - **Graph Neural Network with Two Uplift Estimators for Label-Scarcity
-  Individual Uplift Modeling** (arxiv 2403.06489, 2024). Same GNN-for-uplift
-  space, marketing domain. **⚠️ needs read** for the same reason as above.
+  Individual Uplift Modeling** (arxiv 2403.06489, 2024) — https://arxiv.org/abs/2403.06489
+  **✅ deep-read complete 2026-09-03.** Non-blocking. Same shape as the
+  above: (a) individual-level user-treatment-effect estimation; (b) graph
+  nodes = external user features + social relationships, no internal-
+  activation nodes; (c) outcome = user response to treatment, not classifier
+  F1; (d) intervention set = marketing/business strategies applied to users,
+  no model-retraining interventions; (e) marketing/user-targeting domain.
+  Same three-axis divergence from CADENCE Claim B.
 
 - **Long-term causal effects estimation via latent surrogates representation
   learning** (ScienceDirect 2024). Latent surrogate representations for
@@ -185,9 +188,10 @@ Kept as the primary independent claim.
 
 ## Follow-ups deferred (not blocking)
 
-1. Deep-read the two ⚠️ arxiv papers (2311.08434, 2403.06489) once WebFetch
-   is reliably available. Update this file + `decisions.md` if either
-   collides with the narrowed Claim B.
+1. ~~Deep-read the two ⚠️ arxiv papers (2311.08434, 2403.06489)~~ — **DONE
+   2026-09-03**. Both papers are marketing-uplift over user/social graphs
+   with treatment-selection outcomes — three-axis divergence from CADENCE
+   Claim B. No claim-language revision needed. Recorded above.
 2. **Search Semantic Scholar / dblp** for last-90-day arxiv preprints tagged
    `[cs.LG]` + `drift` + `RL` before the paper is submitted, in case
    something new surfaces mid-review.
