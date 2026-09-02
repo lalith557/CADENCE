@@ -90,3 +90,7 @@ data/CIFAR10/
 
 # --- CodeCarbon output ---
 emissions.csv
+
+# Gate evaluator report (regenerable from ledger + log)
+experiments/gate_a_stage1_gates.json
+experiments/gate_a_stage2_gates.json
