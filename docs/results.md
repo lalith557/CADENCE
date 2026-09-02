@@ -797,3 +797,61 @@ Format per entry:
   - `--contested-only` restricts training to the 3 hard scenarios where SLA is contested. A production RSO should be trained on `build_step_a_scenarios` (5 default + 3 contested = 8 scenarios) so it doesn't overfit the reward to the tail. Deferred to the full Gate A run.
   - λ climbing to 87.2 (near `lambda_max=100`) is aggressive; on the contested scenarios that's the correct signal, but re-training with a lower `dual_lr` (say 1.0 instead of 5.0) would give a smoother trajectory and probably better sample efficiency.
   - `phase_c_run` above ran with `--eval-windows 3` and terminated at step 0 because the drift wasn't severe enough to push pre_f1 below SLA=0.65. Rerun with `--eval-scenario contested_v14_partial_recoverable --sla 0.80` to actually stress the learned policy across multiple windows.
+
+---
+
+### R-Gate-E-verified: independent re-verification of the ~69%/~1.7% Elec2 result (§16)   (2026-09-01)
+- **Hypothesis / question:** Does the R-Gate-E published claim — CADENCE saves ~69 % compute for a ~1.7 % F1 loss on Elec2 vs the reactive-full baseline — reproduce when recomputed independently from raw per-seed logs, and does the setup pass a leakage / paired-analysis audit?
+- **Setup:**
+  - Source of truth: `experiments/phase_e_elec2.json` (Aug 29 run). No re-training here — this entry re-derives numbers from the raw per-seed dicts inside `raw["cadence_rule"|"reactive_full"|"periodic"]` (`n=3` per strategy, `mean_f1`, `total_gpu_hr`, `action_counts`, `n_rollbacks`).
+  - Elec2 loaded via `river.datasets.Elec2()` (45,312 half-hourly price rows). Temporal split: train = rows [0, 13593] (30 %), stream = rows [13593, 45312] (70 %). 10 windows × 1024 rows per episode, SLA=0.65, finetune_epochs=2, fullretrain_epochs=5, periodic_period=4.
+- **Command to reproduce (the recomputation, not the underlying run):**
+  ```bash
+  PYTHONIOENCODING=utf-8 python -c "
+  import json, statistics
+  from scipy import stats
+  d = json.load(open('experiments/phase_e_elec2.json'))
+  raw = d['raw']
+  rso = raw['cadence_rule']; rf = raw['reactive_full']
+  savings = 1 - statistics.fmean([r['total_gpu_hr'] for r in rso]) / statistics.fmean([r['total_gpu_hr'] for r in rf])
+  f1_gap = statistics.fmean([r['mean_f1'] for r in rso]) - statistics.fmean([r['mean_f1'] for r in rf])
+  print(f'compute savings: {100*savings:.2f}%, F1 gap: {f1_gap:+.4f}')
+  "
+  ```
+- **Result (recomputed from raw):**
+
+  | strategy       | n | mean_F1 (mean ± std)   | total_gpu_hr (per-seed identical) | rollbacks/ep | actions {no,part,full} |
+  |----------------|---|------------------------|-----------------------------------|--------------|------------------------|
+  | `cadence_rule` | 3 | 0.5745 ± 0.0002        | 1.5319e-07                        | 6.0          | 5.0 / 4.0 / 3.0        |
+  | `reactive_full`| 3 | 0.5911 ± 0.0066        | 4.9648e-07                        | 6.0          | 0.0 / 0.0 / 10.0       |
+  | `periodic`     | 3 | 0.4140 ± 0.0093        | 9.9295e-08                        | 1.0          | 8.0 / 0.0 / 2.0        |
+
+  RSO vs `reactive_full` (paired, per-seed):
+  - **F1 delta (RSO − reactive_full)** per seed: [-0.0163, -0.0087, -0.0249], mean **-0.0166**, 95 % bootstrap CI [-0.0249, -0.0087].
+  - **Compute savings** per seed: [+69.14 %, +69.14 %, +69.14 %], mean **+69.14 %**, 95 % bootstrap CI [+69.14 %, +69.14 %].
+  - Paired Wilcoxon (n=3): p_gpu_hr (1-sided, RSO < RF) = **0.125** (n=3 minimum); p_mean_F1 (2-sided) = **0.250**.
+
+  RSO vs `periodic`: F1 delta **+0.1604** (95 % CI [+0.15, +0.17]); compute savings **-54.28 %** (RSO uses **1.54×** as much compute as periodic).
+
+- **Statistical test:** paired Wilcoxon signed-rank across seeds — with n=3 the smallest achievable 1-sided p is 0.125, so the test is underpowered for a strict-significance claim; the report is descriptive + effect-size + CI.
+- **Verdict (matches pre-registration Part 2 mapping):**
+  - **Compute savings claim of ~69 % vs reactive_full: REPRODUCES exactly (69.14 %).** Zero cross-seed variance (all three seeds land at 1.5319e-07 GPU-hr for RSO) because `cadence_rule` is deterministic given the drift stream and the rule policy — this is a fidelity signal on the recomputation, not a bug, but it means the effective n on cost is 1, not 3.
+  - **F1 loss claim of ~1.7 %: REPRODUCES (-1.66 %, CI wholly negative and small).** Bootstrap CI [-0.025, -0.009] confirms the gap is real and small.
+  - **This is a Claim-B (PRACTICAL) result** per `docs/gate_a_preregistration.md` Part 2 (compute savings > 50 %, F1 gap in the [-0.03, -0.005] window, effect size small). Cannot yet claim Claim A (STRONG) because F1 non-inferiority requires more seeds and the current test is underpowered.
+- **Leakage / split check (passed):**
+  - Temporal train / stream split (30 % / 70 %) — no rows shared, no overlap.
+  - Undrifted-stream F1 = 0.4250 vs train F1 = 0.8400 = **41.5 pp drop** with no adaptation — this is genuine drift, not artefact.
+  - Class-balance shift train → stream: 44.5 % → 41.6 % (Δ = -2.9 pp), consistent with a real distributional change.
+  - No normalization stats were fit on stream data (train-only preprocessing).
+- **Interpretation (honest):**
+  - The **69 %/1.7 % pair is real and reproducible** from the raw log — the R-Gate-E claim survives independent recomputation, which is the important thing.
+  - Under the pre-registration's criteria this is a **PRACTICAL (Claim B) result**, not STRONG (Claim A). To upgrade to Claim A would require paired non-inferiority stats at n≥10, which needs a re-run — this entry does not perform it.
+  - **The zero cross-seed variance in cost is a fidelity signal, not a scientific defect.** `cadence_rule` runs a hand-written rule policy against a fixed drift stream — of course cost is deterministic. The paper's H2 headline should either (a) run the same protocol under `--per-seed-policies` with a learned RSO to get honest RL-training variance, or (b) explicitly frame Elec2 as a *system-level* demonstration where the rule policy's determinism is a feature (predictable operational cost).
+  - **6 rollbacks per RSO episode (out of 12 total actions = 50 % rollback rate)** is high and worth flagging. It means shadow validation is bouncing about half of RSO's proposed fixes. The net result is still the 69 % savings (because rolled-back attempts were partial retrains, whose cost is small relative to a full retrain), but the operational picture is "safe experimentation with heavy rollback," not "smart policy that gets it right first try."
+- **Threats to validity:**
+  - **n=3 seeds** — paired Wilcoxon has p=0.125 minimum; treat as descriptive, not inferential. Elec2 at ≥10 seeds is needed for the paper's H2 table.
+  - **Rule policy, not learned PPO.** The `cadence_rule` strategy here is the hand-written rule fallback, not the trained PPO. The learned-policy re-run (needed once Stage 2 completes) is what turns this from a "predictable rule" into a "learned trade-off."
+  - **Airlines is not re-verified** in this entry (the R-Gate-E entry already flagged the hash-encoding masked the drift there). A one-hot-top-K encoder re-run of Airlines is the remaining §16 sub-task; not in scope for this entry.
+  - **Closed-form cost model** feeds all GPU-hr numbers; a CodeCarbon-measured comparison on the same runs would confirm the ratios within measurement noise but is not blocking for the ~69 % claim.
+- **Status vs pre-registration Part 2:** Elec2 evidence contributes to **PRACTICAL (Claim B)**. Contributes zero evidence to Claim A until an n≥10 non-inferiority re-run lands.
+
