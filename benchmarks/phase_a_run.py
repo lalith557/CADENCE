@@ -115,6 +115,16 @@ def main(argv: list[str] | None = None) -> int:
              "across the eval seed loop = pseudoreplication). Turn on for any run "
              "whose numbers feed a statistical claim.",
     )
+    p.add_argument(
+        "--only-seed",
+        type=int,
+        default=None,
+        help="Run only this single seed index (baselines + RSO). Used by "
+             "run_experiment.py to drive per-seed resumable execution — one "
+             "subprocess per seed so a kill loses at most one seed's work. "
+             "Overrides `--seeds` for loop iteration; keep --seeds set to any "
+             "positive value for argument parity.",
+    )
     p.add_argument("--out", default="experiments/phase_a_summary.json")
     args = p.parse_args(argv)
 
@@ -304,12 +314,19 @@ def main(argv: list[str] | None = None) -> int:
 
         all_results: dict[str, dict[str, list]] = {}
 
+        # --only-seed narrows both loops to a single seed for subprocess-per-seed
+        # execution driven by run_experiment.py. Leaves the legacy `range(args.seeds)`
+        # path untouched when --only-seed is not supplied.
+        seeds_iter = (
+            [args.only_seed] if args.only_seed is not None else list(range(args.seeds))
+        )
+
         for scenario in eval_scenarios:
             all_results[scenario.name] = {name: [] for name in baseline_names + ["rso_ppo"]}
             log.info("eval_scenario_start", name=scenario.name)
 
             for factory in baseline_factories:
-                for seed in range(args.seeds):
+                for seed in seeds_iter:
                     set_global_seed(seed)
                     strat = factory()
                     outcome = run_baseline(
@@ -330,7 +347,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     all_results[scenario.name][strat.name].append(outcome)
 
-            for seed in range(args.seeds):
+            for seed in seeds_iter:
                 set_global_seed(seed)
                 # W-36 fix: under --per-seed-policies, train a fresh policy
                 # with `PPOTrainConfig(seed=seed)`. This is the honest
