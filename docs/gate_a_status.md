@@ -85,5 +85,51 @@ python run_experiment.py --config configs/gate_a.yaml --stage 1 --resume
 
 ## Live (updated by runner)
 
-*Runner writes ledger entries atomically; check `experiments/gate_a_ledger.json`
-for current per-seed state, and `logs/stage1.log` for training output.*
+**Stage 1 launched 2026-09-02 08:39 UTC. First launch failed at MLflow alembic
+migration** (stale `experiments/mlflow.db` from Aug 31 held a revision the
+installed MLflow 2.19 couldn't locate). Root cause: an mlflow db from a newer
+version was left in place. **Fix landed same session:** the stale db was moved
+to `experiments/mlflow.db.bak-YYYYMMDD-HHMMSS` (never deleted) and Stage 1
+re-launched with `--resume`. The runner correctly marked seed 0 FAILED, stopped,
+and the resume path picked it up.
+
+**Re-launch as of 14:11 UTC:**
+- Ledger transitions: seed 0 FAILED → seed 0 RUNNING → (seeds 1, 2 NOT_STARTED).
+- Seed 0's PPO training is live on cuda (device_info logged), reward-component
+  instrumentation active, augmented-Lagrangian dual-λ evolving healthily
+  (3.2 → 9.6 over the first several dual updates — well below the prior run's
+  runaway to 87). Both `action_partial` and `action_full` fire — no action
+  collapse visible so far.
+- Wall clock projection: ~30–60 min/seed on RTX 4070 Laptop; Stage 1 total
+  ~1.5–3 hours end-to-end, within the pre-reg's 4-hour Stage 1 budget.
+
+**Everything is checkpointed. The next session (or a fresh shell) resumes with:**
+```
+python run_experiment.py --config configs/gate_a.yaml --stage 1 --resume
+```
+
+When Stage 1 completes:
+1. Read the per-seed results in `experiments/gate_a_stage1/seed_{0,1,2}.json`.
+2. Evaluate the 8 G-gates from `docs/gate_a_preregistration.md` Part 1 against
+   the reward-component decomposition (in each seed's MLflow run + step info).
+3. Write outcome as `R-Gate-A-stage1` in `docs/results.md`. If all 8 pass,
+   flip to Stage 2 via `python run_experiment.py --stage 2 --resume` (10 seeds
+   × 30k steps × 8 scenarios; expect multi-hour to overnight; consider
+   `scripts/colab_gate_a.py` if local budget is tight).
+4. If any gate fails: single-fix loop per pre-reg Part 1's decision tree.
+
+**§16 Elec2 re-verify: DONE this session** → `R-Gate-E-verified` in
+`docs/results.md`. Recomputation from raw independently reproduces the
+69.14% compute savings / -0.0166 F1 gap. Under pre-reg Part 2 mapping this is
+a **PRACTICAL (Claim B)** result — cannot be upgraded to STRONG (Claim A)
+without paired non-inferiority stats at n≥10.
+
+**§7 Docker boot: BLOCKED** — Docker daemon is offline
+(`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`).
+User needs to start Docker Desktop. Then:
+```
+docker-compose up --build dashboard mlflow
+# browse http://localhost:8501 for the Streamlit dashboard
+```
+Config was already validated (see R-Gate-G-clean-clone); this session did not
+change the compose spec.
