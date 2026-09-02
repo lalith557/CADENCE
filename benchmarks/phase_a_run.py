@@ -243,7 +243,16 @@ def main(argv: list[str] | None = None) -> int:
         # this "shared policy" step is skipped. Legacy behavior (single
         # policy at seed=42) preserved for reproducing R-4 / R-Gate-A-w28
         # numbers.
-        model = None
+        # Seed list, defined up front so per-seed policies can be trained ONCE
+        # here (before the scenario loop), then reused across every scenario.
+        # --only-seed narrows to a single seed for subprocess-per-seed execution
+        # driven by run_experiment.py.
+        seeds_iter = (
+            [args.only_seed] if args.only_seed is not None else list(range(args.seeds))
+        )
+
+        model = None  # legacy single shared policy (per_seed_policies=False)
+        models_by_seed: dict[int, object] = {}
         if not args.per_seed_policies:
             model = train_ppo(
                 _wrapped_factory,
@@ -256,12 +265,6 @@ def main(argv: list[str] | None = None) -> int:
                 check_env_first=False,
             )
             log.info("ppo_ready", per_seed_policies=False)
-        else:
-            log.info(
-                "ppo_deferred_per_seed",
-                per_seed_policies=True,
-                reason="each seed will train its own policy inside the eval loop",
-            )
 
         if args.train_only:
             # W-28 close-out: we just need a 15-d obs checkpoint on disk.
@@ -280,6 +283,30 @@ def main(argv: list[str] | None = None) -> int:
             print(f"PPO checkpoint saved to: {train_only_summary['checkpoint_path']}")
             print(f"Trained {args.train_timesteps} timesteps on {len(eval_scenarios)} scenarios.")
             return 0
+
+        # W-38 fix: train exactly ONE PPO policy per seed, here — OUTSIDE the
+        # scenario loop — then reuse it to evaluate every scenario. The previous
+        # code trained a policy per (scenario, seed): it multiplied the compute
+        # budget by len(scenarios) (~18 h Stage 1 / ~160 h Stage 2) and violated
+        # the pre-registered unit of analysis (one generalist policy per seed,
+        # evaluated on all scenarios — docs/gate_a_preregistration.md Part 2).
+        # `_wrapped_factory` cycles round-robin across all scenarios, so a single
+        # policy is trained on the full contested curriculum.
+        if args.per_seed_policies:
+            for seed in seeds_iter:
+                set_global_seed(seed)
+                seed_ckpt = Path("experiments") / f"rso_ppo_phase_a_seed{seed}.zip"
+                models_by_seed[seed] = train_ppo(
+                    _wrapped_factory,
+                    cfg=PPOTrainConfig(
+                        total_timesteps=args.train_timesteps,
+                        seed=seed,
+                        verbose=0,
+                    ),
+                    save_path=seed_ckpt,
+                    check_env_first=False,
+                )
+                log.info("per_seed_ppo_ready", seed=seed, ckpt=str(seed_ckpt))
 
         run_cfg = BaselineRunConfig(
             window_size=args.window_size,
@@ -314,13 +341,6 @@ def main(argv: list[str] | None = None) -> int:
 
         all_results: dict[str, dict[str, list]] = {}
 
-        # --only-seed narrows both loops to a single seed for subprocess-per-seed
-        # execution driven by run_experiment.py. Leaves the legacy `range(args.seeds)`
-        # path untouched when --only-seed is not supplied.
-        seeds_iter = (
-            [args.only_seed] if args.only_seed is not None else list(range(args.seeds))
-        )
-
         for scenario in eval_scenarios:
             all_results[scenario.name] = {name: [] for name in baseline_names + ["rso_ppo"]}
             log.info("eval_scenario_start", name=scenario.name)
@@ -349,23 +369,9 @@ def main(argv: list[str] | None = None) -> int:
 
             for seed in seeds_iter:
                 set_global_seed(seed)
-                # W-36 fix: under --per-seed-policies, train a fresh policy
-                # with `PPOTrainConfig(seed=seed)`. This is the honest
-                # independent-seed protocol for statistical claims (Gate A
-                # protocol §13). Runtime scales linearly with args.seeds.
-                if args.per_seed_policies:
-                    seed_ckpt = Path("experiments") / f"rso_ppo_phase_a_seed{seed}.zip"
-                    model = train_ppo(
-                        _wrapped_factory,
-                        cfg=PPOTrainConfig(
-                            total_timesteps=args.train_timesteps,
-                            seed=seed,
-                            verbose=0,
-                        ),
-                        save_path=seed_ckpt,
-                        check_env_first=False,
-                    )
-                    log.info("per_seed_ppo_ready", seed=seed, ckpt=str(seed_ckpt))
+                # W-38 fix: reuse the per-seed policy trained ONCE above, instead
+                # of retraining per (scenario, seed).
+                eval_model = models_by_seed[seed] if args.per_seed_policies else model
                 stream_pair = make_baseline_stream(X_stream, y_stream, scenario, seed=seed)
                 eval_stream_X, eval_stream_y = stream_pair[0], stream_pair[1]
                 fresh_adapter = adapter.clone()
@@ -381,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
                     cfg=eval_sandbox_cfg,
                 )
                 rso_outcome = evaluate_ppo(
-                    model,
+                    eval_model,
                     env,
                     unrelated_X=X_unrel,
                     unrelated_y=y_unrel,

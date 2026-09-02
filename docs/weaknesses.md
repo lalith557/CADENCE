@@ -276,12 +276,17 @@ Audited across all five lenses after the Phase 0 gate passed (R-0).
        called exactly `len(seeds_iter)` times regardless of the number of
        scenarios.
     3. Rerun Stage 1 with the fix (should now complete in ~4-6 h).
-- **Status:** open. Stage 1 in-flight run WILL continue and produce valid
-  per-(scenario,seed) data — that data is not scientifically wrong, it just
-  answers a slightly different question (scenario-specialist policies vs
-  one generalist policy per seed). Whichever the pre-registration reader
-  prefers determines whether we (a) accept the in-flight results as-is,
-  (b) refit under the corrected design after Stage 1 finishes, or (c) kill
-  Stage 1 now and restart with the fix. Recommend option (b): let the
-  in-flight run finish (evidence of pipeline correctness), then rerun
-  Stage 1 under the fix before Stage 2 anchors on it.
+- **Status:** **FIXED** (2026-09-02). Chose option (c): killed the in-flight
+  buggy Stage 1 (5.5 h in, 0 seeds complete, λ pinned at the 100 cap → heading
+  for a G6 failure anyway), backed the ledger up to
+  `experiments/gate_a_ledger.pre-w38.json`, and hoisted the `train_ppo(...)`
+  call out of the `for scenario in eval_scenarios` loop into a per-seed loop
+  that runs ONCE before scenario evaluation (`benchmarks/phase_a_run.py`:
+  training now at the `for seed in seeds_iter` block ~L296, reused via
+  `models_by_seed[seed]` in the eval loop). Guard test
+  `tests/unit/test_w38_per_seed_training.py` asserts `train_ppo` is called
+  exactly `n_seeds` times regardless of scenario count (2 tests green).
+  Because `_wrapped_factory` trains one policy round-robin across all contested
+  scenarios, the per-scenario violation is now averaged rather than pinned on
+  the unrecoverable scenario — this should also relieve the λ→100 saturation
+  seen in the buggy run; watch gate G6 on the clean relaunch to confirm.
