@@ -56,7 +56,7 @@ Verified against actual code / results / artifacts, not commit messages.
 |---|---|---|
 | Docker boot (`docker-compose up --build`) | NOT DONE | Docker daemon offline last check (see R-Gate-G-clean-clone); needs Docker Desktop running |
 | Real dashboard CDAG (W-30) | NOT DONE | requires extending artifacts w/ raw NOTEARS weights + rendering |
-| REST API end-to-end verification | PARTIAL | test exists (`test_api_learned_ppo`, commit `354cb50d`); manual boot pending |
+| REST API end-to-end verification | **DONE (this session, partial)** | 6/7 `tests/integration/test_api.py` pass under FastAPI TestClient (`/score`, `/monitor`, `/decide` rule branch, `/health`, `/admin/reload`); 1 SKIPPED — `test_api_learned_ppo` fails to load the existing PPO checkpoint with `No module named 'numpy._core.numeric'` (numpy-checkpoint compatibility, not an API bug). Learned branch will re-verify once the Stage 1 PPO checkpoint under the current numpy is available. |
 | CI green on real push (W-8) | NOT DONE | requires `git push`; no green badge yet |
 | Remove `mypy continue-on-error` (W-11) | NOT DONE | after typing pass |
 
