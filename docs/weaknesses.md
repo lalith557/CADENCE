@@ -244,3 +244,44 @@ Audited across all five lenses after the Phase 0 gate passed (R-0).
 - **Severity × Effort:** minor × low
 - **Fix plan:** `docker-compose up --build dashboard mlflow` on a clean clone; record R-Gate-G-clean-clone with the browser screenshot.
 - **Status:** open — pending a clean-clone reboot.
+
+### W-38: PPO is trained per (scenario, seed), not once per seed — Stage 1 budget blown 4-5x   (2026-09-02)
+- **Lens:** research-validity / performance-cost / correctness
+- **Finding:** In `benchmarks/phase_a_run.py` the per-seed-policies training call
+  sits INSIDE the `for scenario in eval_scenarios:` loop (~L343-350). Under
+  `--per-seed-policies` this trains a fresh PPO for every (scenario, seed)
+  rather than once per seed. Consequences:
+    1. **Compute blowup.** Stage 1 seed 0's first scenario PPO took 6985 s
+       (~2 h). 3 contested scenarios × 3 seeds = 9 PPO trainings × ~2 h ≈
+       **18 h** for Stage 1 — 4.5x the pre-registration's 4 h budget.
+       Stage 2 (8 scenarios × 10 seeds × ~2 h) ≈ **160 h** locally.
+    2. **Overfits policies to a single scenario** (no cross-scenario
+       generalization signal). The multi-scenario env factory was designed
+       to train ONE policy round-robin across scenarios, then evaluate on
+       each — the intended §2.9-fixed curriculum.
+    3. **Pre-registration says** "each independent training seed produces
+       one policy; each policy runs deterministic eval over the 8 test
+       scenarios" (docs/gate_a_preregistration.md Part 2, "Unit of
+       analysis"). Current code violates that by producing 8 policies per
+       seed, not 1.
+- **Severity x Effort:** blocker x low. One-line fix: move the
+  `if args.per_seed_policies: model = train_ppo(...)` block OUT of the
+  `for scenario` loop and INTO an outer `for seed in seeds_iter` block
+  that trains once per seed, then re-uses that model across all scenarios
+  in the eval loops that follow.
+- **Fix plan:**
+    1. Refactor `benchmarks/phase_a_run.py` to hoist PPO training out of the
+       scenario loop.
+    2. Add a failing unit test that mocks `train_ppo` and asserts it is
+       called exactly `len(seeds_iter)` times regardless of the number of
+       scenarios.
+    3. Rerun Stage 1 with the fix (should now complete in ~4-6 h).
+- **Status:** open. Stage 1 in-flight run WILL continue and produce valid
+  per-(scenario,seed) data — that data is not scientifically wrong, it just
+  answers a slightly different question (scenario-specialist policies vs
+  one generalist policy per seed). Whichever the pre-registration reader
+  prefers determines whether we (a) accept the in-flight results as-is,
+  (b) refit under the corrected design after Stage 1 finishes, or (c) kill
+  Stage 1 now and restart with the fix. Recommend option (b): let the
+  in-flight run finish (evidence of pipeline correctness), then rerun
+  Stage 1 under the fix before Stage 2 anchors on it.
