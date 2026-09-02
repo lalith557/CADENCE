@@ -1,0 +1,187 @@
+# CADENCE — Gate A frozen experiment config (STUB — defers to signed pre-reg)
+#
+# **Source of truth:** `docs/gate_a_preregistration.md` (signed 2026-09-01,
+# anchored to commit `cfcf860`). Its Stage-1 gates and Stage-2 verdict
+# criteria are FROZEN. Where any value below appears to conflict with the
+# pre-reg (e.g. `dual.lambda_max`, per-seed policy protocol, `ent_coef`),
+# the pre-registration wins. Do not overwrite the pre-reg to match this
+# file; edit this file to match the pre-reg.
+#
+# Fix status: the master-prompt §2 audit items are largely already landed
+# in commits W-32..W-37 (reward rescaled, `ent_coef=0.01`, VecNormalize,
+# prequential training reward, `--per-seed-policies`, per-env replay RNG).
+# Before touching any value below, reconcile against the current code and
+# the pre-reg — do not assume this template's numbers are the live ones.
+#
+# This is a starter template for the confirmatory Gate A run described in
+# CADENCE-GATE-A-MASTER-PROMPT.md §10 / §23 (Stage 2 confirmatory) / §24
+# (pre-registration). It is NOT plug-and-play. Before the frozen run, the
+# downstream Claude must:
+#
+#   1. Extend `cadence/common/config.py`:
+#      - Add `"gate_a"` to the `Config.profile` Literal.
+#      - Add the `rso.ppo.*`, `rso.dual.*`, `rso.env.*`, `experiment.protocol.*`,
+#        and `gate_a.*` fields below to their respective pydantic models
+#        (otherwise they are silently ignored by pydantic v2 defaults).
+#   2. Thread each new field to its actual consumer:
+#      - `rso.ppo.*`         → `cadence/rso/ppo.py::PPOTrainConfig`
+#      - `rso.dual.*`        → `cadence/rso/lagrangian.py::AugmentedLagrangianConfig`
+#      - `rso.env.*`         → `cadence/rso/env.py::SandboxConfig`
+#      - `experiment.protocol.per_seed_policies` → `benchmarks/phase_a_run.py`
+#        (train an independent PPO per seed instead of a single seed=42 policy).
+#   3. Freeze the values below by pre-registration in
+#      `docs/gate_a_preregistration.md` (must be signed and dated before the
+#      final Gate-A run is executed). Any change after freeze invalidates the run.
+#
+# Values below embed the fixes flagged in the master prompt §2. Every number
+# should be justified in decisions.md and, where uncertain, tuned in Stage-1
+# diagnostics (§23) before the confirmatory run.
+
+profile: default          # switch to "gate_a" once the schema Literal is extended.
+
+data:
+  root: Dataset
+  fraud_csv: Dataset/Credit Card Fraud Detection/creditcard.csv
+  gmsc_train_csv: Dataset/Give Me Some Credit/cs-training.csv
+  telco_csv: Dataset/Telco Customer Churn/WA_Fn-UseC_-Telco-Customer-Churn.csv
+  adult_dir: Dataset/adult
+  torchvision_cache: .cadence_cache/torchvision
+  test_size: 0.2
+  val_size: 0.1
+
+model:                    # FraudNet — unchanged from default
+  hidden_dims: [64, 32]
+  dropout: 0.2
+  lr: 0.001
+  batch_size: 256
+  max_epochs: 30
+  early_stopping_patience: 5
+  class_weighted: true
+
+cdag:
+  layer_1_clusters: 8
+  layer_2_clusters: 4
+  cluster_k_sweep: [2, 16]
+  window_size: 2048
+  stats: [mean, var, skew]
+  pc_alpha: 0.05
+  notears_lambda: 0.01
+  notears_max_iter: 100
+
+rso:
+  top_k: 5
+
+  # --- Reward weights: RESCALED to fix master-prompt §2.1 ------------------
+  # Prior values (w_gpu_hr=0.05, w_kg_co2=0.5) made the cost penalty ~1e-5,
+  # ~5 orders of magnitude below the F1/SLA terms, so the policy was blind
+  # to compute cost. Placeholder starting scales below MUST be validated by
+  # a Stage-1 reward-component instrumentation run showing per-step reward
+  # decomposition and that cost is now visible without dominating. Finalize
+  # by pre-registration.
+  # NOTE: these fields are already in the schema.
+  w_gpu_hr: 500.0         # was 0.05 — TENTATIVE, verify in §6 diagnostics
+  w_kg_co2: 5000.0        # was 0.5  — TENTATIVE, verify in §6 diagnostics
+  lambda_sla_init: 1.0
+  lambda_update_period: 10
+  ppo_lr: 0.0003
+  ppo_clip: 0.2
+  ppo_gamma: 0.99
+  ppo_gae_lambda: 0.95
+
+  # --- New PPO knobs (require schema addition; ignored until wired) --------
+  ppo:
+    total_timesteps: 30000
+    n_steps: 2048         # was 128 — larger rollout stabilizes small-action-space PPO
+    batch_size: 64
+    n_epochs: 10
+    ent_coef: 0.01        # was 0.0 (SB3 default) — fixes exploration collapse §2.2
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    normalize_observations: true    # VecNormalize wrap — §2.3
+    normalize_rewards: true         # VecNormalize wrap — §2.3
+    clip_obs: 10.0
+    n_envs: 4                       # SubprocVecEnv for legit speedup — §5
+
+  # --- Augmented-Lagrangian dual (requires schema addition) ----------------
+  dual:
+    enabled: true
+    lambda_init: 1.0
+    lambda_min: 0.0
+    lambda_max: 100.0     # matches signed pre-reg G6 (final λ ≤ 50 is the gate)
+    dual_lr: 1.0          # was 5.0 — smoother updates; verify λ trajectory in §6
+    target_violation: 0.0
+    ema_beta: 0.5
+
+  # --- Sandbox env knobs (require schema addition) -------------------------
+  env:
+    window_size: 2048
+    max_windows_per_episode: 20
+    finetune_epochs: 5          # HONEST: match eval; no train/eval fidelity gap §2.7
+    fullretrain_epochs: 15      # HONEST: match eval
+    replay_buffer_size: 5000
+    replay_ratio_new: 0.7
+    ewc_penalty: 1000.0
+    ewc_fisher_sample_size: 2000
+    ewc_cache_fisher: true
+    # Prequential F1 in the training reward, not in-sample post-retrain F1 (§2.4).
+    # New flag: after action, evaluate on the NEXT window, not the just-trained one.
+    prequential_training_reward: true
+    # Fix the hardcoded rng(0) replay sampler (§2.6) — seed replay per env instance.
+    seed_replay_per_env: true
+
+executor:
+  fisher_sample_size: 5000
+  replay_ratio_new: 0.7
+  finetune_lr: 0.0001
+  finetune_max_epochs: 10
+  ewc_lambda: 1000.0
+  tau_partial_unfreeze: 0.15
+  tau_diffuse_escalate: 0.60
+
+sla:
+  f1_relative_floor: 0.95
+  shadow_window_hours: 24
+  forgetting_epsilon: 0.02
+
+budget:
+  max_vram_gb: 4.0        # keep at 4 for paper-reproducibility per D-11
+  seeds_headline: 10
+  seeds_ablation: 5
+
+experiment:
+  seed: 42                # kept for legacy fields; per-seed policies override below
+  mlflow_uri: sqlite:///experiments/mlflow.db
+  experiment_name: cadence-gate-a
+
+  # --- Protocol (requires schema addition; ignored until wired) ------------
+  protocol:
+    # Fix master-prompt §2.5 pseudoreplication: train an independent PPO per
+    # seed instead of reusing a single seed=42 policy across all eval seeds.
+    per_seed_policies: true
+    seed_list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]     # 10 independent training seeds
+    train_val_test_split:
+      train_scenarios: [contested_amount_partial, contested_v14_partial,
+                        contested_time_full, amount_multiplicative_gradual,
+                        v14_additive_abrupt]
+      val_scenarios:   [amount_multiplicative_abrupt]      # HP + checkpoint select
+      test_scenarios:  [time_gradual, contested_v14_full_needed, held_out_TBD]
+      # TEST SET STAYS UNTOUCHED UNTIL SUCCESS CRITERIA ARE PRE-REGISTERED
+      # AND SIGNED IN docs/gate_a_preregistration.md.
+
+    # Checkpointing for the resumable overnight pipeline (master §4).
+    checkpoint_every_steps: 2000
+    eval_every_steps: 2000
+    atomic_result_writes: true
+    resume_from_checkpoint: true
+
+    # Two-stage discipline gate — Stage 1 must PASS before Stage 2 runs.
+    require_stage1_diagnostic_pass: true
+    stage1_diagnostic_report_path: docs/gate_a_stage1_diagnostics.md
+
+# --- Pre-registration ------------------------------------------------------
+gate_a:
+  preregistration_path: docs/gate_a_preregistration.md
+  # If the pre-registration file is missing, unsigned, or its `frozen: true`
+  # field is false, the run refuses to touch the test scenarios. The runner
+  # (§19 of the master prompt) enforces this before any test-set evaluation.
+  refuse_test_eval_if_unfrozen: true

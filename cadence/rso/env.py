@@ -266,6 +266,13 @@ class RetrainingSandboxEnv(gym.Env):
                 "pre_f1": pre_f1,
                 "cost_gpu_hr": cost_gpu_hr,
                 "cost_kg_co2": cost_kg_co2,
+                # Stage-1 diagnostics need the reward decomposition per step
+                # to verify G3 (reward improves), G4 (cost signal visible),
+                # G5 (not just SLA gaming). See docs/gate_a_preregistration.md.
+                "delta_f1_component": float(delta_f1),
+                "cost_penalty_component": float(cost_penalty),
+                "sla_penalty_component": float(self.cfg.lambda_sla * sla_penalty),
+                "action": int(action),
             },
         )
 

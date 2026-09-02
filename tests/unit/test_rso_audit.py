@@ -230,6 +230,38 @@ def test_phase_a_run_supports_per_seed_ppo_training() -> None:
 # ---------- W-37: replay RNG per env instance ----------
 
 
+def test_step_info_exposes_reward_components_for_stage1_gates() -> None:
+    """Stage-1 gates G3/G4/G5 need the reward decomposition per step.
+
+    env.step must return info with:
+      * delta_f1_component
+      * cost_penalty_component
+      * sla_penalty_component
+    that sum (with signs) to the scalar reward.
+    """
+    cfg = SandboxConfig(window_size=64, max_windows_per_episode=5, cost_scale=1e7)
+    env = _dummy_env(cfg)
+    env.reset()
+    _, reward, _, _, info = env.step(2)  # full retrain — nonzero cost
+    for key in ("delta_f1_component", "cost_penalty_component", "sla_penalty_component"):
+        assert key in info, (
+            f"Stage-1 regression: env.step info lacks `{key}`. Gates G3/G4/G5 "
+            f"need to see the reward decomposition per step; add these to the "
+            f"info dict in env.step (they cost nothing extra to compute)."
+        )
+    # Round-trip: components sum (with signs) to reward.
+    reconstructed = (
+        info["delta_f1_component"]
+        - info["cost_penalty_component"]
+        - info["sla_penalty_component"]
+    )
+    assert abs(reconstructed - reward) < 1e-6, (
+        f"Stage-1 regression: reward components don't sum to reward "
+        f"({reconstructed} vs {reward}). The Stage-1 sanity gates rely on "
+        f"decomposing the scalar reward into these three."
+    )
+
+
 def test_replay_batch_differs_across_consecutive_partial_retrains() -> None:
     """W-37: env._do_partial_retrain uses np.random.default_rng(0) freshly
     every call. Two consecutive calls select identical replay indices.
