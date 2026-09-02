@@ -40,6 +40,26 @@ Thumbs.db
 # --- MLflow local store ---
 experiments/mlruns/
 experiments/**/artifacts/
+# sqlite tracking db + backups from the mlflow>=2 migration (P5/W-14 fix path).
+experiments/mlflow.db
+experiments/mlflow.db.bak-*
+experiments/mlflow.db-journal
+experiments/mlflow.db-shm
+experiments/mlflow.db-wal
+
+# --- Gate A resumable-runner state ---
+# The ledger is per-machine runtime state (git commit + config hash reproduce
+# it), and per-seed result JSONs are regenerable from the runner. Backups
+# tagged with .pre-* are audit-trail files — track only if you deliberately
+# want them in history.
+experiments/gate_a_ledger.json
+experiments/gate_a_ledger.pre-*.json
+experiments/gate_a_stage1/
+experiments/gate_a_stage2/
+
+# --- Session / job logs ---
+logs/
+*.log
 
 # --- CADENCE runtime caches ---
 .cadence_cache/

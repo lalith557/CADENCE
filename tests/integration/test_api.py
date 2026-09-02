@@ -117,16 +117,36 @@ def test_decide_uses_learned_policy_when_checkpoint_loaded(client: TestClient) -
     """When a real PPO checkpoint is loaded, /decide's `reason` must say so."""
     from pathlib import Path
 
-    ckpt = Path("experiments/rso_ppo_phase_a.zip")
-    if not ckpt.exists():
-        pytest.skip("no PPO checkpoint on disk")
-    try:
-        from stable_baselines3 import PPO
+    # Try multiple candidate checkpoints, preferring newer per-seed ones from
+    # Stage 1 (W-36/W-38) over the legacy shared-policy one from R-4/R-Gate-A-w28.
+    # Older checkpoints may fail to load with `No module named 'numpy._core.numeric'`
+    # if they were pickled under a different numpy major (numpy>=2 vs 1.x) —
+    # skip those and try the next one instead of failing the whole test.
+    candidates = [
+        Path("experiments/rso_ppo_phase_a_seed0.zip"),
+        Path("experiments/rso_ppo_phase_a_seed1.zip"),
+        Path("experiments/rso_ppo_phase_a_seed2.zip"),
+        Path("experiments/rso_ppo_phase_a.zip"),
+    ]
+    existing = [c for c in candidates if c.exists()]
+    if not existing:
+        pytest.skip("no PPO checkpoint on disk (Stage 1 has not produced one yet)")
 
-        STATE.policy = PPO.load(str(ckpt), custom_objects={"lr_schedule": lambda _: 0.0})
-        STATE.checkpoint_path = str(ckpt)
-    except Exception as e:  # noqa: BLE001
-        pytest.skip(f"PPO load failed: {e}")
+    from stable_baselines3 import PPO
+
+    last_err: Exception | None = None
+    loaded = False
+    for ckpt in existing:
+        try:
+            STATE.policy = PPO.load(str(ckpt), custom_objects={"lr_schedule": lambda _: 0.0})
+            STATE.checkpoint_path = str(ckpt)
+            loaded = True
+            break
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            continue
+    if not loaded:
+        pytest.skip(f"all {len(existing)} candidate PPO checkpoints failed to load; last error: {last_err}")
 
     # Match the 4-feature trigger baseline from _prep_state().
     rng = np.random.default_rng(2)
