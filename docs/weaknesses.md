@@ -290,3 +290,13 @@ Audited across all five lenses after the Phase 0 gate passed (R-0).
   scenarios, the per-scenario violation is now averaged rather than pinned on
   the unrecoverable scenario — this should also relieve the λ→100 saturation
   seen in the buggy run; watch gate G6 on the clean relaunch to confirm.
+
+### W-39: dual_lr=5.0 saturates λ at cap under W-32 rescaled reward (fixed)   (2026-09-03)
+- **Lens:** research-validity / correctness
+- **Finding:** Stage-1 diagnostic run (`gate-a-cbb3f72d`) failed pre-reg gates G6, G7, G8. Root cause: `AugmentedLagrangianConfig.dual_lr=5.0` + `target_violation=0.0` under the W-32-rescaled reward (cost_scale=1e7) pushed lambda_sla to the lambda_max=100.0 cap early in training and held it there for all 9,216 dual_update events in the last 30% of training across all 3 seeds. Under saturated λ, the policy collapses to always-retrain (deterministic → G7 fail; expensive → G8 fail).
+- **Severity × Effort:** blocker × trivial (one default per file).
+- **Fix plan:** Calm both defaults to `dual_lr=1.0`:
+    1. `cadence/rso/lagrangian.py::AugmentedLagrangianConfig.dual_lr`
+    2. `benchmarks/phase_a_run.py --dual-lr`
+  Add `tests/unit/test_w39_dual_lr_calmed.py` pinning both defaults + the unchanged other dual-update knobs.
+- **Status:** fixed. See commits landing this weakness + R-Gate-A-stage1-fail-1. Stage-1 re-run pending user authorization (~5h wall).

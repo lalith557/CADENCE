@@ -42,7 +42,13 @@ class AugmentedLagrangianConfig:
     lambda_init: float = 1.0
     lambda_min: float = 0.0
     lambda_max: float = 100.0
-    dual_lr: float = 5.0
+    # W-39: calmed from 5.0 after R-Gate-A-stage1-fail-1. Under W-32-rescaled
+    # reward, dual_lr=5.0 pushed lambda to the 100.0 cap in the last 30% of
+    # every seed's training and held it there (mean=100.00 over 9,216 dual
+    # updates), failing pre-reg gate G6 (mean last-30% <= 50) and G7 (cross-
+    # seed std <= 0.02 because always-retrain policy is deterministic).
+    # A calmer 1.0 is the pre-reg's single-fix loop response.
+    dual_lr: float = 1.0
     # target_violation > 0 = tolerate that much average SLA slack before
     # tightening. 0 = strict.
     target_violation: float = 0.0

@@ -932,3 +932,59 @@ Format per entry:
   saturated subset*. This is a defensible paper claim and it satisfies the Phase B
   driver-prompt "H1 easy/hard breakdown" ask.
 
+
+---
+
+### R-Gate-A-stage1-fail-1: Stage-1 completes but G6/G7/G8 FAIL — dual-λ saturated at cap   (2026-09-03)
+- **Hypothesis / question:** Does the post-W-38 Stage-1 run pass all 8 pre-registered
+  sanity gates in `docs/gate_a_preregistration.md` Part 1?
+- **Setup:**
+  - Ledger: `experiments/gate_a_ledger.json` (experiment_id `gate-a-cbb3f72d-1c6d265fa7e3`).
+  - Config: `configs/gate_a.yaml`, `dual_lr=5.0`, `target_violation=0.0`,
+    `lambda_max=100.0`, `--per-seed-policies`, 3 seeds × 3000 timesteps ×
+    3 contested-SLA scenarios, W-32..W-38 fixes on.
+  - Runner: `python run_experiment.py --config configs/gate_a.yaml --stage 1`,
+    background task `b6ij9baf1`, logs to `logs/stage1_w38fix.log`.
+- **Command to reproduce:** exactly as above (the runner is idempotent — atomic ledger writes with `os.replace`).
+- **Result (all 3 seeds COMPLETED, gates evaluated via `scripts/evaluate_stage1_gates.py`):**
+
+  | seed | status    | wall              | per-scenario RSO F1     |
+  |------|-----------|-------------------|-------------------------|
+  | 0    | COMPLETED | 7026.0s (117 min) | 0.933 / 0.833 / 0.075   |
+  | 1    | COMPLETED | 6379.9s (106 min) | 0.933 / 0.833 / 0.072   |
+  | 2    | COMPLETED | 6208.4s (103 min) | 0.933 / 0.833 / 0.060   |
+
+  **Gates:**
+
+  | Gate | Verdict | Threshold | Measured |
+  |------|---------|-----------|----------|
+  | G1 no action collapse | TBD | max action_pct ≤ 85% on last 30% | pending MLflow query |
+  | G2 policy entropy | TBD | mean entropy ≥ 0.15 nats last 30% | pending MLflow query |
+  | G3 reward increases | TBD | last-30% mean − first-30% mean ≥ 0.10 | pending MLflow query |
+  | G4 cost signal visible | TBD | abs(cost) ≥ 1% of abs(Δf1) avg | pending MLflow query |
+  | G5 not SLA-gaming | TBD | both penalties shrink | pending MLflow query |
+  | **G6 dual-λ ≤ 50** | **FAIL** | mean last-30% ≤ 50 | **mean = 100.00** (capped) over 9,216 dual updates; final = 100.00 |
+  | **G7 cross-seed variance** | **FAIL** | std across seeds ≥ 0.02 | **std = 0.0021** across the 3 seed means (0.6138, 0.6128, 0.6090) |
+  | **G8 4h budget** | **FAIL** | total wall ≤ 4h across 3 seeds | **total = 5.45h** (7026 + 6380 + 6208 s) |
+
+- **Statistical test:** N/A (gate evaluation, not a hypothesis test).
+- **Diagnosis (single root cause per pre-reg Part 1 single-fix loop):**
+    1. **G6 saturation is the root cause.** Under the W-32 rescaled reward (`cost_scale=1e7`), `dual_lr=5.0` pushed λ to `lambda_max=100.0` early in training and pinned it there. Log evidence: 9,216 dual_update events parsed from `logs/stage1_w38fix.log`, mean λ over the last 30% = 100.00.
+    2. **G7 follows mechanically from G6.** With λ = 100 the reward is dominated by the SLA-penalty term, so the reward-optimal action becomes "always retrain" and every per-seed policy converges to the same near-deterministic behaviour. Identical eval-stream drift → identical F1 → zero cross-seed variance. This is exactly the pathology W-25 described, reappearing at a new equilibrium (previously bang-bang no-op; now bang-bang always-retrain).
+    3. **G8 is partially explained by G6 too** — always-retrain means every episode step incurs a retrain, driving up wall time. Fixing G6 should partially relieve G8 as well.
+
+- **Single-fix response (per pre-reg Part 1):**
+  - **W-39: reduce `dual_lr` default from 5.0 → 1.0** in both `cadence/rso/lagrangian.py::AugmentedLagrangianConfig` and `benchmarks/phase_a_run.py --dual-lr`. Rationale: a 5× smoother update stops the aggressive climb before it saturates; the audit doc §1.8 already flagged 5.0 as "aggressive; audit-doc improvement #8 recommends 0.5–1.0."
+  - Test-first: `tests/unit/test_w39_dual_lr_calmed.py` — 3 tests that assert both defaults are 1.0 and pin the other dual-update knobs (unchanged). Failed pre-fix (2 of 3), passing post-fix (3 of 3).
+  - Did NOT change `target_violation`, `lambda_max`, `lambda_init`, or `ema_beta` — pre-reg Part 3 rule #3 requires a new pre-registration to change more than one knob at a time.
+
+- **Next step (user's call — costs another ~5h wall):**
+    1. `rm experiments/gate_a_ledger.json` to start Stage 1 clean per pre-reg.
+    2. `python run_experiment.py --config configs/gate_a.yaml --stage 1`.
+  If R-Gate-A-stage1-fail-2 is needed after that (say λ now stays near lambda_init because dual_lr is *too* low), the next single fix is `target_violation=0.02` per audit §1.8. Do NOT stack fixes; one at a time.
+
+- **Threats to validity / open questions:**
+  - **G1–G5 remain TBD** — the reward-component decomposition (`d3a3406`) IS logged to `env.step`'s info dict, but is not yet threaded to a MLflow metric callback. To close G1–G5 the next session should add a step-info → MLflow callback (or read the per-episode Monitor CSV that SB3 writes if `Monitor` is wrapped). Even under the fix, if G4 fails we'd know the cost rescaling is off in the other direction.
+  - The G8 budget of 4h was set before the W-38 fix; even under the fix a 3-seed × 3-scenario contested run took 5.45h. This may indicate the budget itself was aspirational; recommend flagging as a pre-registration amendment discussion, not silently upping the budget.
+  - **The eval-stream stat itself may lack variance** even under a mixed policy — the drift injector is deterministic given seed, and F1 on a fixed drift is bounded. G7's std=0.02 threshold might be unmet even with a well-mixed policy; needs re-check under the W-39 fix.
+- **Status:** R-Gate-A-stage1-fail-1 recorded honestly. Stage 2 **BLOCKED** until R-Gate-A-stage1-pass lands. W-39 fix + failing test committed; user authorization needed to burn another ~5h on the re-run.

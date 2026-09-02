@@ -100,7 +100,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--w-gpu-hr", type=float, default=0.05)
     p.add_argument("--w-kg-co2", type=float, default=0.5)
     p.add_argument("--lambda-init", type=float, default=1.0)
-    p.add_argument("--dual-lr", type=float, default=5.0)
+    p.add_argument("--dual-lr", type=float, default=1.0,
+                   help="Augmented-Lagrangian dual learning rate. Calmed from 5.0 "
+                        "to 1.0 by W-39 after R-Gate-A-stage1-fail-1 (lambda "
+                        "saturated at 100.0 cap under the W-32 rescaled reward).")
     p.add_argument("--ewc-penalty", type=float, default=1000.0)
     p.add_argument("--contested-only", action="store_true",
                    help="Restrict eval to just the 3 contested-SLA scenarios.")
