@@ -31,7 +31,7 @@ Verified against actual code / results / artifacts, not commit messages.
 | §13 | Statistical rigor / unit of analysis | DONE | pre-reg §3; `--per-seed-policies` enforces independent policies |
 | §14 | Ablations | PARTIAL | components exist; unified ablation table pending |
 | §15 | Robustness | PARTIAL | R-Gate-F robustness curves landed; drift-magnitude sweep pending |
-| §16 | Elec2 re-verification from raw | **NOT DONE** | pending this session or next |
+| §16 | Elec2 re-verification from raw | **DONE (prior session)** | `R-Gate-E-verified` in `docs/results.md` — 69.14%/-0.017 REPRODUCES; classified PRACTICAL (Claim B) |
 | §17 | Hidden-bug hunt | DONE | audit §1 covers 10 confirmed/suspected bugs; W-32..W-37 fixed |
 | §18 | Automated sanity checks | PARTIAL | 7 audit tests + 3 runner tests; §17 broader guards pending |
 | §19 | One-command experiment | **DONE (this session)** | `run_experiment.py` with `--stage`, `--seed`, `--resume`, `--dry-run` |
@@ -82,6 +82,32 @@ Launched / in-flight: **Stage 1** — see §Live below.
 ```
 python run_experiment.py --config configs/gate_a.yaml --stage 1 --resume
 ```
+
+## This session — bounded work landed (2026-09-02, post W-38 fix)
+
+- **W-38 (previous session's log)**: fixed by commit `cbb3f72d` — `train_ppo` hoisted
+  out of the scenario loop; `models_by_seed[seed]` reused across all scenarios;
+  new `tests/unit/test_w38_per_seed_training.py` (2 tests, both pass).
+- **API test robustness (numpy checkpoint compat, W-11 tail)** — commit `d3a3406→(current)`:
+  `test_decide_uses_learned_policy_when_checkpoint_loaded` now tries a *list* of
+  candidate checkpoints (per-seed from Stage 1 first, then legacy shared) and
+  skips only if all fail. Removes the 7th-test skip once Stage 1 produces fresh
+  per-seed checkpoints under the current numpy 1.26.
+- **`.gitignore` hygiene** — mlflow.db + backups + WAL, gate_a_ledger*.json,
+  gate_a_stage{1,2}/, logs/, `*.log`, gate-eval reports. `experiments/mlflow.db`
+  untracked from index (kept locally).
+- **`scripts/evaluate_stage1_gates.py`** — 8-gate reader per pre-reg Part 1.
+  Auto-evaluates G6 (dual-λ trajectory from log), G7 (cross-seed metrics
+  variance), G8 (wall time budget). G1-G5 marked TBD with exact MLflow
+  queries named. Preliminary run against the in-flight Stage 1 log:
+  **G6 PASS** — 46 dual_update events, final λ=19.07, max ever=19.07 —
+  well below the 50 threshold and dramatically better than the pre-fix run
+  that hit 87 near the 100 cap. Direct evidence W-32 (reward rescale) is
+  working.
+- **W-4 correction**: `docs/prior_art.md` is actually 197 lines of
+  paper-ready related work with per-claim narrowing (D-17/D-18). Two ⚠️
+  deep-reads deferred but non-blocking after narrowing. Not "NOT DONE" —
+  substantially DONE, only the WebFetch-blocked deep-reads remain.
 
 ## Live (updated by runner)
 
