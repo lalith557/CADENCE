@@ -988,3 +988,29 @@ Format per entry:
   - The G8 budget of 4h was set before the W-38 fix; even under the fix a 3-seed × 3-scenario contested run took 5.45h. This may indicate the budget itself was aspirational; recommend flagging as a pre-registration amendment discussion, not silently upping the budget.
   - **The eval-stream stat itself may lack variance** even under a mixed policy — the drift injector is deterministic given seed, and F1 on a fixed drift is bounded. G7's std=0.02 threshold might be unmet even with a well-mixed policy; needs re-check under the W-39 fix.
 - **Status:** R-Gate-A-stage1-fail-1 recorded honestly. Stage 2 **BLOCKED** until R-Gate-A-stage1-pass lands. W-39 fix + failing test committed; user authorization needed to burn another ~5h on the re-run.
+
+---
+
+### R-Gate-A-stage1-fail-3: W-41+W-42 fix G6 and halve wall, but G4/G7/G8 remain (measurement/budget)   (2026-09-04)
+- **Hypothesis / question:** After W-41 (target_violation=0.13) and W-42 (Stage-1 skip-baselines), does the Stage-1 diagnostic pass all 8 pre-registered gates?
+- **Setup:** `run_experiment.py --stage 1`, background task `bzbvbd7h1`, log `logs/stage1_w41w42.log`, ledger `gate-a-2ca06ac-…`. 3 seeds × 3000 timesteps × 3 contested scenarios, per-seed policies, **no baselines** (W-42, pre-reg-compliant).
+- **Result (all 3 seeds COMPLETED; total wall 5.55h, down from 13h):**
+
+  | Gate | Verdict | Measured |
+  |------|---------|----------|
+  | G1 no action collapse | ✅ PASS | worst-run last-30% max action share = 0.729 (≤ 0.85) |
+  | G2 policy entropy | ✅ PASS | worst-run entropy = 0.558 nats (≥ 0.15) |
+  | G3 reward increases | TBD | `ppo/rollout/ep_rew_mean` not logged by MLflowCallback (SB3 emits it only at rollout boundaries; metric-name/plumbing gap, not a policy signal) |
+  | **G4 cost visible ≥ 1%** | ❌ FAIL | worst-run cost/Δf1 ratio = 0.0009 (range 0.0009–0.0022); cost signal present but ~5–10× below the 1% bar |
+  | G5 not SLA-gaming | ✅ PASS | cost shrinks 3/3, sla shrinks 3/3 |
+  | **G6 dual-λ ≤ 50** | ✅ **PASS** | **mean last-30% = 12.06, final 35.5, max ever 35.5** — W-41 worked (was 100 saturated) |
+  | **G7 cross-seed std ≥ 0.02** | ❌ FAIL | std = 0.0021 across seed means (0.6138, 0.6128, 0.6090) |
+  | **G8 wall ≤ 4h** | ❌ FAIL | 5.55h (per-seed 117/111/106 min) |
+
+- **Interpretation (the substantive win, and why the remaining 3 are not policy-health failures):**
+  - **G6 is the headline.** The λ-saturation pathology that failed fail-1 (dual_lr=5.0 → λ=100) and fail-2 (dual_lr=1.0 → λ=100) is fixed by the data-informed target_violation=0.13: λ now equilibrates at a mean of ~12 with a maximum ever of 35.5, comfortably under the 50 bar. The live trajectory (decaying from λ_init=1.0) matched the W-41 dynamics-simulation test exactly.
+  - **G1/G2/G5 confirm a healthy, exploring, cost-responsive policy** — the bang-bang collapse is gone and the policy reduces both cost and SLA penalties over training without gaming.
+  - **G4** is a magnitude-calibration issue, not a "cost is invisible" issue (G5 shows the policy *does* respond to cost). The `cost_scale=1e7` from W-32 lands the cost/Δf1 ratio at ~0.1–0.2%, below the gate's 1%. Single-knob fix: raise `cost_scale` ~5–10× (risk: too high re-collapses to no-op; must re-check G1/G5/G6).
+  - **G7** is a *measurement artifact*, not pseudoreplication. Per-seed policies (W-36) and per-env replay RNG (W-37) are live, yet cross-seed F1 std is ~0.002 because the per-scenario F1s are **quantized** on tiny 1024-row eval windows with few positives (values like 0.933=14/15, 0.833=5/6). The policies genuinely converge and the eval F1 is discretized, so the 0.02 std bar is near-unmeetable regardless of policy quality. Fix: larger eval windows / more windows so F1 is continuous (also makes the eventual Stage-2 paired stats non-degenerate) — connects to W-17.
+  - **G8** is compute budget. skip-baselines (W-42) cut 13h → 5.55h, but per-seed PPO training alone is ~1.9h (each of 3000 timesteps triggers a sandbox retrain), so 3 seeds ≥ ~5.7h floor. The 4h budget was set before this per-timestep cost was known. Fix: SubprocVecEnv PPO parallelism (risky on Windows; only speeds the training half) OR a pre-registration budget amendment to ~6h for the *diagnostic* stage.
+- **Status:** 4/8 PASS incl. all policy-health gates. G4/G7/G8 remain — each a measurement/budget issue with a distinct fix. **This is a decision point (amend gates vs. keep iterating), escalated to the operator rather than auto-iterated.** Stage 2 remains BLOCKED until Stage 1 fully passes (or the gate set is amended with justification).
