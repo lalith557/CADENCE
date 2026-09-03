@@ -51,7 +51,23 @@ class AugmentedLagrangianConfig:
     dual_lr: float = 1.0
     # target_violation > 0 = tolerate that much average SLA slack before
     # tightening. 0 = strict.
-    target_violation: float = 0.0
+    # W-41: raised from 0.0 after R-Gate-A-stage1-fail-2. Even under W-39's
+    # dual_lr=1.0, lambda still saturated at the 100.0 cap (final=100.0 over
+    # 4,457 dual updates in seed 0). ROOT CAUSE, measured empirically from the
+    # fail-2 log: the 3-scenario contested mix INCLUDES a permanently-
+    # unrecoverable scenario (contested_v14_tail_flip_unrecoverable, F1~=0.07),
+    # so episode_mean_violation is bimodal {0.0 (14%), 0.15 (86%)} with a
+    # last-30% mean of 0.119. With target_violation=0.0 the dual gradient stays
+    # ~+0.12 forever -> lambda climbs to the cap. Asking a Lagrangian dual to
+    # satisfy a fundamentally-unsatisfiable constraint is ill-posed; the fix is
+    # to tolerate the irreducible violation floor. 0.13 sits just above the
+    # measured floor so lambda reaches equilibrium (net-negative gradient in
+    # steady state) instead of saturating, while still rising early in training
+    # when the recoverable scenarios are being violated too.
+    # Cleaner long-term alternative (deferred): exclude unrecoverable scenarios
+    # from the dual-lambda TRAINING signal while keeping them in EVAL, so the
+    # constraint controller only targets achievable constraints.
+    target_violation: float = 0.13
     # Exponential moving-average smoothing on the per-episode violation so
     # single outliers don't spike λ.
     ema_beta: float = 0.5

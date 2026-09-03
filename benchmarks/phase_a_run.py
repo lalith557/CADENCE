@@ -128,6 +128,15 @@ def main(argv: list[str] | None = None) -> int:
              "Overrides `--seeds` for loop iteration; keep --seeds set to any "
              "positive value for argument parity.",
     )
+    p.add_argument(
+        "--skip-baselines",
+        action="store_true",
+        help="W-42: skip the 3 full-fidelity baselines (PSI+full/fixed/EWC-only). "
+             "The Stage-1 diagnostic protocol (pre-reg Part 1) is explicitly "
+             "'No baselines' — they belong to Stage 2. Skipping them removes "
+             "~2.4h/seed of wall time (gate G8) and is pre-reg-compliant for "
+             "Stage 1. The RSO's own eval still runs, so gate G7 keeps its data.",
+    )
     p.add_argument("--out", default="experiments/phase_a_summary.json")
     args = p.parse_args(argv)
 
@@ -348,27 +357,36 @@ def main(argv: list[str] | None = None) -> int:
             all_results[scenario.name] = {name: [] for name in baseline_names + ["rso_ppo"]}
             log.info("eval_scenario_start", name=scenario.name)
 
-            for factory in baseline_factories:
-                for seed in seeds_iter:
-                    set_global_seed(seed)
-                    strat = factory()
-                    outcome = run_baseline(
-                        adapter=adapter,
-                        baseline_state=baseline_state,
-                        baseline_threshold=baseline_threshold,
-                        historical_X=X_pre,
-                        historical_y=y_pre,
-                        stream_X_raw=X_stream,
-                        stream_y_raw=y_stream,
-                        unrelated_X=X_unrel,
-                        unrelated_y=y_unrel,
-                        scenario=scenario,
-                        strategy=strat,
-                        seed=seed,
-                        cfg=run_cfg,
-                        feature_names=ds.feature_names,
-                    )
-                    all_results[scenario.name][strat.name].append(outcome)
+            # W-42: Stage-1 diagnostic runs WITHOUT baselines. The pre-registration
+            # (docs/gate_a_preregistration.md Part 1) states the Stage-1 protocol
+            # is "3 seeds x 3000 timesteps x 3 contested scenarios. No baselines.
+            # Purpose: confirm the policy actually learns before we spend Stage-2
+            # compute." Running the 3 full-fidelity baselines here was both a
+            # pre-reg deviation and ~2.4h of the 4.3h/seed wall time that failed
+            # gate G8. --skip-baselines brings Stage 1 into compliance and is the
+            # dominant G8 lever. Stage 2 (confirmatory) still runs baselines.
+            if not args.skip_baselines:
+                for factory in baseline_factories:
+                    for seed in seeds_iter:
+                        set_global_seed(seed)
+                        strat = factory()
+                        outcome = run_baseline(
+                            adapter=adapter,
+                            baseline_state=baseline_state,
+                            baseline_threshold=baseline_threshold,
+                            historical_X=X_pre,
+                            historical_y=y_pre,
+                            stream_X_raw=X_stream,
+                            stream_y_raw=y_stream,
+                            unrelated_X=X_unrel,
+                            unrelated_y=y_unrel,
+                            scenario=scenario,
+                            strategy=strat,
+                            seed=seed,
+                            cfg=run_cfg,
+                            feature_names=ds.feature_names,
+                        )
+                        all_results[scenario.name][strat.name].append(outcome)
 
             for seed in seeds_iter:
                 set_global_seed(seed)

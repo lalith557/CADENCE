@@ -55,6 +55,8 @@ STAGE_PARAMS: dict[int, dict[str, Any]] = {
         "window_size": 1024,
         "sla": 0.65,
         "contested_only": True,
+        # W-42: Stage-1 diagnostic is "No baselines" per pre-reg Part 1.
+        "skip_baselines": True,
     },
     2: {
         "seeds": 10,
@@ -63,6 +65,8 @@ STAGE_PARAMS: dict[int, dict[str, Any]] = {
         "window_size": 2048,
         "sla": 0.65,
         "contested_only": False,
+        # Stage-2 confirmatory DOES compare against baselines.
+        "skip_baselines": False,
     },
 }
 
@@ -187,6 +191,8 @@ def _default_run_one_seed(
     ]
     if params["contested_only"]:
         cmd.append("--contested-only")
+    if params.get("skip_baselines"):
+        cmd.append("--skip-baselines")
 
     print(f"\n[stage {stage} seed {seed}] launching:")
     print(f"  {' '.join(cmd)}")

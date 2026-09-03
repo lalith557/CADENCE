@@ -52,16 +52,17 @@ def test_augmented_lagrangian_default_dual_lr_is_calmed() -> None:
 
 
 def test_augmented_lagrangian_bounds_unchanged() -> None:
-    """lambda_min/lambda_max/target_violation/ema_beta unchanged from pre-reg.
+    """lambda bounds + ema_beta unchanged by W-39 (dual_lr only).
 
-    We calm dual_lr only. Do not touch the other dual-update knobs without
-    a new pre-registration amendment (pre-reg Part 3 rule #3).
+    NOTE: `target_violation` was 0.0 at W-39 time but was later raised to 0.13
+    by W-41 (R-Gate-A-stage1-fail-2) — it is now owned and pinned by
+    tests/unit/test_w41_target_violation.py, not here. Each was a separate
+    single-knob loop iteration.
     """
     src = (REPO / "cadence" / "rso" / "lagrangian.py").read_text(encoding="utf-8")
     assert _default_of(src, "AugmentedLagrangianConfig", "lambda_init") == 1.0
     assert _default_of(src, "AugmentedLagrangianConfig", "lambda_min") == 0.0
     assert _default_of(src, "AugmentedLagrangianConfig", "lambda_max") == 100.0
-    assert _default_of(src, "AugmentedLagrangianConfig", "target_violation") == 0.0
     assert _default_of(src, "AugmentedLagrangianConfig", "ema_beta") == 0.5
 
 
