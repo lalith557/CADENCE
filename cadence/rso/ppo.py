@@ -83,6 +83,108 @@ class MLflowCallback(BaseCallback):
         return True
 
 
+class RewardComponentCallback(BaseCallback):
+    """Aggregate per-step reward-decomposition + action distribution and log to MLflow.
+
+    Closes gates G1, G3, G4, G5 in docs/gate_a_preregistration.md Part 1 by
+    surfacing the fields env.step() puts in info (delta_f1_component,
+    cost_penalty_component, sla_penalty_component, action). G2 (policy entropy)
+    is covered by SB3's own logger via MLflowCallback (metric name
+    `ppo/train/entropy_loss` = -mean(entropy)).
+
+    Metric schema (all prefixed `reward/` or `action/` so they don't collide
+    with SB3's `ppo/*` namespace):
+      * reward/delta_f1_avg               window mean of |delta_f1|
+      * reward/cost_penalty_avg           window mean of |cost_penalty|
+      * reward/sla_penalty_avg            window mean of |sla_penalty|
+      * reward/cost_visible_ratio         cost_penalty_avg / (delta_f1_avg + eps)
+                                          -> G4: >= 0.01 required
+      * reward/lambda_sla_avg             window mean of Augmented-Lagrangian λ
+      * action/no_op_pct                  fraction of steps with action == 0
+      * action/partial_pct                fraction of steps with action == 1
+      * action/full_pct                   fraction of steps with action == 2
+      * action/max_pct                    max of the three -> G1: <= 0.85 required
+
+    The gate evaluator (scripts/evaluate_stage1_gates.py) queries this schema
+    via mlflow.tracking.MlflowClient().get_metric_history() and applies each
+    gate's threshold.
+
+    Robust to missing info keys (older env versions without the W-32
+    instrumentation): silently skips steps whose info lacks the reward
+    decomposition, so this callback can be attached unconditionally.
+    """
+
+    _EPS = 1e-12
+
+    def __init__(self, log_every: int = 500) -> None:
+        super().__init__()
+        self.log_every = log_every
+        self._last_logged = 0
+        self._reset_window()
+
+    def _reset_window(self) -> None:
+        self._delta_f1_sum = 0.0
+        self._cost_pen_sum = 0.0
+        self._sla_pen_sum = 0.0
+        self._lambda_sum = 0.0
+        self._lambda_count = 0
+        self._action_counts = [0, 0, 0]  # [no-op, partial, full]
+        self._n_steps_in_window = 0
+
+    def _on_step(self) -> bool:
+        infos = self.locals.get("infos", [])
+        for info in infos:
+            if not isinstance(info, dict):
+                continue
+            if "delta_f1_component" in info:
+                self._delta_f1_sum += abs(float(info["delta_f1_component"]))
+                self._cost_pen_sum += abs(float(info.get("cost_penalty_component", 0.0)))
+                self._sla_pen_sum += abs(float(info.get("sla_penalty_component", 0.0)))
+                self._n_steps_in_window += 1
+                action_i = info.get("action")
+                if isinstance(action_i, int) and 0 <= action_i <= 2:
+                    self._action_counts[action_i] += 1
+            if "lambda_sla" in info:
+                self._lambda_sum += float(info["lambda_sla"])
+                self._lambda_count += 1
+
+        if self.num_timesteps - self._last_logged < self.log_every:
+            return True
+        self._last_logged = self.num_timesteps
+
+        # Flush the window.
+        n = max(self._n_steps_in_window, 1)
+        delta_f1_avg = self._delta_f1_sum / n
+        cost_pen_avg = self._cost_pen_sum / n
+        sla_pen_avg = self._sla_pen_sum / n
+        cost_visible_ratio = cost_pen_avg / (delta_f1_avg + self._EPS)
+        total_actions = max(sum(self._action_counts), 1)
+        no_op_pct = self._action_counts[0] / total_actions
+        partial_pct = self._action_counts[1] / total_actions
+        full_pct = self._action_counts[2] / total_actions
+        max_pct = max(no_op_pct, partial_pct, full_pct)
+
+        try:
+            step = self.num_timesteps
+            mlflow.log_metric("reward/delta_f1_avg", delta_f1_avg, step=step)
+            mlflow.log_metric("reward/cost_penalty_avg", cost_pen_avg, step=step)
+            mlflow.log_metric("reward/sla_penalty_avg", sla_pen_avg, step=step)
+            mlflow.log_metric("reward/cost_visible_ratio", cost_visible_ratio, step=step)
+            if self._lambda_count:
+                mlflow.log_metric(
+                    "reward/lambda_sla_avg", self._lambda_sum / self._lambda_count, step=step
+                )
+            mlflow.log_metric("action/no_op_pct", no_op_pct, step=step)
+            mlflow.log_metric("action/partial_pct", partial_pct, step=step)
+            mlflow.log_metric("action/full_pct", full_pct, step=step)
+            mlflow.log_metric("action/max_pct", max_pct, step=step)
+        except Exception as e:  # pragma: no cover — MLflow noise, not a fail
+            log.warning("mlflow_reward_component_log_failed", err=str(e))
+
+        self._reset_window()
+        return True
+
+
 def train_ppo(
     env_factory: Callable[[], RetrainingSandboxEnv],
     *,
@@ -144,7 +246,13 @@ def train_ppo(
         seed=cfg.seed,
     )
     t0 = time.perf_counter()
-    model.learn(total_timesteps=cfg.total_timesteps, callback=MLflowCallback())
+    # W-40: pair the built-in SB3-logger MLflowCallback with the reward-
+    # decomposition RewardComponentCallback so pre-reg gates G1/G3/G4/G5
+    # can be evaluated from MLflow after training (G2 is covered by
+    # ppo/train/entropy_loss, which MLflowCallback already forwards).
+    from stable_baselines3.common.callbacks import CallbackList
+    callbacks = CallbackList([MLflowCallback(), RewardComponentCallback()])
+    model.learn(total_timesteps=cfg.total_timesteps, callback=callbacks)
     log.info("ppo_train_done", wall_s=time.perf_counter() - t0)
 
     if save_path is not None:
