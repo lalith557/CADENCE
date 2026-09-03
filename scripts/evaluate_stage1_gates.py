@@ -211,41 +211,271 @@ def _gate_g8_budget(ledger: dict[str, Any]) -> GateResult:
     )
 
 
-def _gate_g_mlflow_stub(gate_name: str, description: str) -> GateResult:
+def _gate_g_mlflow_stub(gate_name: str, description: str, why: str) -> GateResult:
+    return GateResult(gate_name, "TBD", description, why, evidence={})
+
+
+# ---------- MLflow querying (G1-G5) ----------
+
+
+def _mlflow_client():
+    """Return an MlflowClient bound to the default sqlite tracking URI, or None."""
+    try:
+        import mlflow
+        from mlflow.tracking import MlflowClient
+
+        # Match cadence.common.tracking's env-var opt-in for file-store URIs.
+        os_env = __import__("os").environ
+        os_env.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+        mlflow.set_tracking_uri(DEFAULT_MLFLOW_URI)
+        return MlflowClient()
+    except Exception:
+        return None
+
+
+def _stage1_runs(
+    client,
+    experiment_name: str = "cadence-gate-a",
+    ledger: dict | None = None,
+):
+    """Return the list of Stage-1 PPO training runs (one per seed), sorted by start_time.
+
+    Filters out stale runs from prior Stage-1 attempts by anchoring to the
+    current ledger's `created` timestamp: only runs started at or after
+    `ledger['created']` count. Without this filter, a previously-failed
+    Stage-1 run's MLflow entries would poison the gate evaluation.
+
+    Returns [] if the experiment doesn't exist or the client is None.
+    """
+    if client is None:
+        return []
+    exp = client.get_experiment_by_name(experiment_name)
+    if exp is None:
+        return []
+    runs = client.search_runs(
+        experiment_ids=[exp.experiment_id],
+        order_by=["attributes.start_time ASC"],
+        max_results=1000,
+    )
+    if ledger is not None and "created" in ledger:
+        from datetime import datetime
+        try:
+            ledger_start_utc = datetime.fromisoformat(ledger["created"].replace("Z", "+00:00"))
+            ledger_start_ms = int(ledger_start_utc.timestamp() * 1000)
+            runs = [r for r in runs if r.info.start_time >= ledger_start_ms]
+        except (ValueError, KeyError, AttributeError):
+            pass  # Ledger timestamp malformed; fall through with unfiltered runs.
+    return list(runs)
+
+
+def _metric_history(client, run_id: str, metric_name: str) -> list[tuple[int, float]]:
+    """Return [(step, value), ...] for a metric, or [] if missing."""
+    try:
+        history = client.get_metric_history(run_id, metric_name)
+        return [(int(m.step), float(m.value)) for m in sorted(history, key=lambda m: m.step)]
+    except Exception:
+        return []
+
+
+def _last30pct_mean(seq: list[tuple[int, float]]) -> float | None:
+    if not seq:
+        return None
+    n = len(seq)
+    tail = seq[int(0.7 * n):] or seq[-max(1, n // 3):]
+    return statistics.fmean(v for _, v in tail)
+
+
+def _first30pct_mean(seq: list[tuple[int, float]]) -> float | None:
+    if not seq:
+        return None
+    n = len(seq)
+    head = seq[: max(1, int(0.3 * n))]
+    return statistics.fmean(v for _, v in head)
+
+
+def _per_run_last30_metric(client, runs, metric_name: str) -> list[tuple[str, float]]:
+    """Return [(run_id, last30pct_mean), ...] for runs that have this metric."""
+    out: list[tuple[str, float]] = []
+    for r in runs:
+        hist = _metric_history(client, r.info.run_id, metric_name)
+        v = _last30pct_mean(hist)
+        if v is not None:
+            out.append((r.info.run_id, v))
+    return out
+
+
+def _gate_g1_no_action_collapse(client, runs) -> GateResult:
+    thresh = "per-run max action_pct on last 30% of training <= 0.85"
+    per_run = _per_run_last30_metric(client, runs, "action/max_pct")
+    if not per_run:
+        return _gate_g_mlflow_stub(
+            "G1", thresh,
+            "no `action/max_pct` metric found in any Stage-1 run "
+            "(requires W-40 RewardComponentCallback wiring live)."
+        )
+    worst = max(v for _, v in per_run)
+    passes = worst <= 0.85
     return GateResult(
-        gate_name,
-        "TBD",
-        description,
-        f"pending MLflow query — connect to `{DEFAULT_MLFLOW_URI}` "
-        f"experiment `cadence-gate-a`, filter runs by tag stage=1, and read "
-        f"metrics from ppo/entropy_loss (G2), ppo/ep_rew_mean (G3), and the "
-        f"per-step info dict components delta_f1/cost_penalty/sla_penalty "
-        f"(G4/G5) or action distribution (G1).",
+        "G1",
+        "PASS" if passes else "FAIL",
+        thresh,
+        f"worst-run last-30% max_pct = {worst:.3f} across {len(per_run)} runs",
+        evidence={"per_run_last30_max_pct": [v for _, v in per_run], "n_runs": len(per_run)},
+    )
+
+
+def _gate_g2_entropy(client, runs) -> GateResult:
+    thresh = "per-run mean policy entropy on last 30% >= 0.15 nats"
+    # SB3 logs `train/entropy_loss = -mean(entropy)`. MLflowCallback forwards
+    # this as `ppo/train/entropy_loss`. Higher is more negative when entropy
+    # is high; policy_entropy = -entropy_loss.
+    per_run: list[float] = []
+    for r in runs:
+        # Try the primary metric name; fall back gracefully.
+        hist = _metric_history(client, r.info.run_id, "ppo/train/entropy_loss")
+        if not hist:
+            hist = _metric_history(client, r.info.run_id, "ppo/entropy_loss")
+        entropy_loss_mean = _last30pct_mean(hist)
+        if entropy_loss_mean is not None:
+            per_run.append(-entropy_loss_mean)  # invert sign
+    if not per_run:
+        return _gate_g_mlflow_stub(
+            "G2", thresh,
+            "no `ppo/train/entropy_loss` metric found in any Stage-1 run "
+            "(requires SB3 built-in logger + MLflowCallback wiring live)."
+        )
+    worst = min(per_run)
+    passes = worst >= 0.15
+    return GateResult(
+        "G2",
+        "PASS" if passes else "FAIL",
+        thresh,
+        f"worst-run last-30% entropy = {worst:.3f} nats across {len(per_run)} runs",
+        evidence={"per_run_last30_entropy": per_run, "chance_entropy_3_actions": 1.0986},
+    )
+
+
+def _gate_g3_reward_increases(client, runs) -> GateResult:
+    thresh = ("per-run rolling mean episode return (last 30%) > (first 30%) "
+              "by >= 0.10, and improvement not driven only by SLA-penalty component")
+    per_run_delta: list[float] = []
+    per_run_sla_share: list[float] = []
+    for r in runs:
+        hist = _metric_history(client, r.info.run_id, "ppo/rollout/ep_rew_mean")
+        first = _first30pct_mean(hist)
+        last = _last30pct_mean(hist)
+        if first is None or last is None:
+            continue
+        per_run_delta.append(last - first)
+        # G5-adjacent: sla_penalty share vs total penalty on last 30%
+        cost_hist = _metric_history(client, r.info.run_id, "reward/cost_penalty_avg")
+        sla_hist = _metric_history(client, r.info.run_id, "reward/sla_penalty_avg")
+        c = _last30pct_mean(cost_hist) or 0.0
+        s = _last30pct_mean(sla_hist) or 0.0
+        share = s / (c + s + 1e-12)
+        per_run_sla_share.append(share)
+    if not per_run_delta:
+        return _gate_g_mlflow_stub(
+            "G3", thresh,
+            "no `ppo/rollout/ep_rew_mean` history in any Stage-1 run."
+        )
+    worst_delta = min(per_run_delta)
+    passes_delta = worst_delta >= 0.10
+    max_sla_share = max(per_run_sla_share) if per_run_sla_share else float("nan")
+    # If ALL improvement was SLA-share-driven that's suspicious (G5-related).
+    sla_gaming_flag = max_sla_share > 0.99
+    verdict = "PASS" if (passes_delta and not sla_gaming_flag) else "FAIL"
+    return GateResult(
+        "G3", verdict, thresh,
+        f"worst-run Δreward = {worst_delta:+.3f} across {len(per_run_delta)} runs; "
+        f"max SLA-share of penalty on last 30% = {max_sla_share:.3f}"
+        + (" (SLA-gaming flag)" if sla_gaming_flag else ""),
+        evidence={"per_run_reward_delta": per_run_delta,
+                  "per_run_sla_share_last30": per_run_sla_share},
+    )
+
+
+def _gate_g4_cost_visible(client, runs) -> GateResult:
+    thresh = "per-run |cost_penalty| / |delta_f1| on last 30% >= 0.01"
+    per_run = _per_run_last30_metric(client, runs, "reward/cost_visible_ratio")
+    if not per_run:
+        return _gate_g_mlflow_stub(
+            "G4", thresh,
+            "no `reward/cost_visible_ratio` metric found (W-40 wiring)."
+        )
+    worst = min(v for _, v in per_run)
+    passes = worst >= 0.01
+    return GateResult(
+        "G4",
+        "PASS" if passes else "FAIL",
+        thresh,
+        f"worst-run last-30% cost/delta_f1 ratio = {worst:.4f} across {len(per_run)} runs",
+        evidence={"per_run_last30_cost_ratio": [v for _, v in per_run]},
+    )
+
+
+def _gate_g5_not_sla_gaming(client, runs) -> GateResult:
+    thresh = ("both cost_penalty AND sla_penalty shrink from first-30% to "
+              "last-30% (i.e. RSO isn't retraining ALL the time to game SLA)")
+    per_run_cost_shrink: list[bool] = []
+    per_run_sla_shrink: list[bool] = []
+    for r in runs:
+        cost_hist = _metric_history(client, r.info.run_id, "reward/cost_penalty_avg")
+        sla_hist = _metric_history(client, r.info.run_id, "reward/sla_penalty_avg")
+        cost_first = _first30pct_mean(cost_hist)
+        cost_last = _last30pct_mean(cost_hist)
+        sla_first = _first30pct_mean(sla_hist)
+        sla_last = _last30pct_mean(sla_hist)
+        if cost_first is None or sla_first is None:
+            continue
+        per_run_cost_shrink.append(cost_last <= cost_first)
+        per_run_sla_shrink.append(sla_last <= sla_first)
+    if not per_run_cost_shrink:
+        return _gate_g_mlflow_stub(
+            "G5", thresh,
+            "no `reward/{cost,sla}_penalty_avg` metrics found (W-40 wiring)."
+        )
+    all_shrink = all(per_run_cost_shrink) and all(per_run_sla_shrink)
+    return GateResult(
+        "G5",
+        "PASS" if all_shrink else "FAIL",
+        thresh,
+        f"cost shrinks on {sum(per_run_cost_shrink)}/{len(per_run_cost_shrink)} runs; "
+        f"sla shrinks on {sum(per_run_sla_shrink)}/{len(per_run_sla_shrink)} runs",
+        evidence={"cost_shrink": per_run_cost_shrink, "sla_shrink": per_run_sla_shrink},
     )
 
 
 def evaluate(log_path: Path = DEFAULT_LOG) -> list[GateResult]:
     ledger = load_ledger()
     dual_updates = parse_dual_updates(log_path)
+    client = _mlflow_client()
+    runs = _stage1_runs(client, ledger=ledger) if client is not None else []
 
     results: list[GateResult] = []
 
-    # G1-G5: pull from MLflow. Stubbed with TBD + data source for now.
-    results.append(_gate_g_mlflow_stub(
-        "G1", "no action collapse: max action_pct on last 30% of training <= 85%"
-    ))
-    results.append(_gate_g_mlflow_stub(
-        "G2", "mean policy entropy over last 30% of training >= 0.15 nats"
-    ))
-    results.append(_gate_g_mlflow_stub(
-        "G3", "rolling mean ep_return (last 30%) > (first 30%) by >= 0.10, not just SLA-term-driven"
-    ))
-    results.append(_gate_g_mlflow_stub(
-        "G4", "|cost_penalty_component| avg >= 1% of |delta_f1_component| avg per step"
-    ))
-    results.append(_gate_g_mlflow_stub(
-        "G5", "sla_penalty AND cost_penalty both shrink over training (not always-retrain gaming)"
-    ))
+    # G1-G5: query MLflow. Each helper falls back to TBD-with-reason if the
+    # metric is missing (e.g. the callback wasn't wired for that run).
+    if not runs:
+        for gate, desc in [
+            ("G1", "no action collapse: max action_pct on last 30% <= 85%"),
+            ("G2", "mean policy entropy on last 30% >= 0.15 nats"),
+            ("G3", "ep_rew_mean improves last-30% vs first-30% by >= 0.10"),
+            ("G4", "|cost_penalty|/|delta_f1| on last 30% >= 0.01"),
+            ("G5", "cost_penalty and sla_penalty both shrink over training"),
+        ]:
+            results.append(_gate_g_mlflow_stub(
+                gate, desc,
+                f"no runs found in MLflow experiment 'cadence-gate-a' at "
+                f"{DEFAULT_MLFLOW_URI} — is Stage 1 finished and did phase_a_run "
+                f"log to this URI?"
+            ))
+    else:
+        results.append(_gate_g1_no_action_collapse(client, runs))
+        results.append(_gate_g2_entropy(client, runs))
+        results.append(_gate_g3_reward_increases(client, runs))
+        results.append(_gate_g4_cost_visible(client, runs))
+        results.append(_gate_g5_not_sla_gaming(client, runs))
 
     # G6-G8: computable from log + ledger directly.
     results.append(_gate_g6_lambda_max(dual_updates))
