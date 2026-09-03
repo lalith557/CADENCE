@@ -83,7 +83,34 @@ Launched / in-flight: **Stage 1** — see §Live below.
 python run_experiment.py --config configs/gate_a.yaml --stage 1 --resume
 ```
 
-## This session — bounded work landed (2026-09-02, post W-38 fix)
+## 2026-09-03 session — 4 tasks landed (Stage 1 relaunched in-flight)
+
+Executing the user's ordered task list:
+1. **G1-G5 callback wired (W-40)** — commit `86a421e`. `RewardComponentCallback`
+   aggregates env.step's info dict + action distribution and logs to MLflow
+   with metric names `reward/*` and `action/*`. `train_ppo` now uses
+   `CallbackList([MLflowCallback, RewardComponentCallback])`. 2 tests
+   (`tests/unit/test_w40_reward_component_callback.py`) — metric names +
+   missing-key robustness — both pass; 17/17 total suite green.
+2. **Stage 1 relaunched** with W-38 (per-seed hoisted) + W-39 (dual_lr=1.0) +
+   W-40 (reward callback) — background task `b3gwmak7r`, log at
+   `logs/stage1_w39w40.log`. Ledger `experiment_id: gate-a-86a421e-…`.
+3. **Evaluator extended** to actually query MLflow for G1-G5 — commit
+   `256f52f`. `scripts/evaluate_stage1_gates.py` now grows real query paths
+   for each gate; falls back to TBD-with-reason on missing metrics; filters
+   stale runs by `ledger['created']` start_time. Preliminary against the
+   in-flight run: **G6 PASS at final λ=3.58 (36 dual events, max ever 3.58 —
+   dramatic improvement over W-39-precursor's 100 saturated).** G1-G5 correctly
+   TBD until PPO training starts logging reward-component metrics.
+4. **Colab handoff recipe** (`scripts/colab_gate_a.py`, commit `39cc4b6`) —
+   replaced the pre-W-38 Aug-30 driver with a 7-cell paste-into-Colab
+   notebook recipe that wraps the current resumable runner unchanged.
+   Anti-cheat section mirrors pre-reg Part 3 rules 1-6.
+
+Once Stage 1 finishes and all 8 gates evaluate: if PASS, hand off Stage 2
+via that Colab recipe (Stage 2 at ~20h wall is not laptop-friendly).
+
+## Prior session — bounded work landed (2026-09-02, post W-38 fix)
 
 - **W-38 (previous session's log)**: fixed by commit `cbb3f72d` — `train_ppo` hoisted
   out of the scenario loop; `models_by_seed[seed]` reused across all scenarios;
