@@ -1014,3 +1014,34 @@ Format per entry:
   - **G7** is a *measurement artifact*, not pseudoreplication. Per-seed policies (W-36) and per-env replay RNG (W-37) are live, yet cross-seed F1 std is ~0.002 because the per-scenario F1s are **quantized** on tiny 1024-row eval windows with few positives (values like 0.933=14/15, 0.833=5/6). The policies genuinely converge and the eval F1 is discretized, so the 0.02 std bar is near-unmeetable regardless of policy quality. Fix: larger eval windows / more windows so F1 is continuous (also makes the eventual Stage-2 paired stats non-degenerate) — connects to W-17.
   - **G8** is compute budget. skip-baselines (W-42) cut 13h → 5.55h, but per-seed PPO training alone is ~1.9h (each of 3000 timesteps triggers a sandbox retrain), so 3 seeds ≥ ~5.7h floor. The 4h budget was set before this per-timestep cost was known. Fix: SubprocVecEnv PPO parallelism (risky on Windows; only speeds the training half) OR a pre-registration budget amendment to ~6h for the *diagnostic* stage.
 - **Status:** 4/8 PASS incl. all policy-health gates. G4/G7/G8 remain — each a measurement/budget issue with a distinct fix. **This is a decision point (amend gates vs. keep iterating), escalated to the operator rather than auto-iterated.** Stage 2 remains BLOCKED until Stage 1 fully passes (or the gate set is amended with justification).
+
+---
+
+### R-Gate-A-stage1-fail-4: combined fix BACKFIRED — cost_scale=1.5e8 collapsed the policy   (2026-09-04)
+- **Hypothesis / question:** Does the combined W-43/44/45 fix (cost_scale 15×, eval-window 4096, budget 6h) pass all 8 gates?
+- **Setup:** `run_experiment.py --stage 1`, task `beyu3g5ca`, log `logs/stage1_w43w44w45.log`, ledger `gate-a-7ff1769-…`.
+- **Result — 2/8 PASS, a REGRESSION from fail-3's 4/8:**
+
+  | Gate | fail-3 (cost_scale 1e7) | fail-4 (cost_scale 1.5e8) | Δ |
+  |------|-------------------------|---------------------------|---|
+  | G1 no collapse | ✅ 0.729 | ❌ **0.99** | regressed |
+  | G2 entropy | ✅ 0.558 | ❌ **0.042** | regressed |
+  | G4 cost visible | ❌ 0.00085 | ❌ **0.00033** | worse |
+  | G5 not gaming | ✅ | ✅ | held |
+  | G6 λ≤50 | ✅ 12.06 | ✅ 14.82 | held |
+  | G7 seed std | ❌ 0.0021 | ❌ **0.0002** | worse |
+  | G8 wall | ❌ 5.55h | ❌ **10.06h** | worse |
+
+- **Diagnosis (unambiguous):**
+  1. **W-43 (cost_scale 1e7→1.5e8) collapsed the policy to no-op.** G1 max-action share jumped to 0.99, entropy to 0.04 — a deterministic single-action policy. Per-scenario F1 is now *bit-identical* across all 3 seeds (0.7619 / 0.7444 / 0.05), the collapse signature. The 15× cost weight made every retrain reward-negative, so the policy learned "never retrain."
+  2. **G4 got WORSE, not better** — the exact tension flagged pre-run. When the policy stops retraining, cost_penalty_avg → 0, so the cost/|Δf1| ratio → 0. **There is no cost_scale that satisfies G4 (cost ≥ 1% of Δf1) AND G1 (no collapse):** low cost_scale → policy retrains but ratio < 1%; high cost_scale → policy stops retraining → ratio → 0. G4 as specified is ill-posed for this reward structure.
+  3. **G7 got WORSE** — the collapsed policy is *identical* across seeds → variance ~0. W-44's bigger eval windows (the intended G7 fix) were never fairly tested because W-43 collapsed the policy in the same run. Combining fixes confounded them — a violation of the one-knob discipline the pre-reg mandates, and the direct cause of an uninterpretable result.
+  4. **G8 hit 10.06h** (per-seed 84→182→338m, *increasing*). eval-window=4096 made the RSO eval ~4× costlier; the increasing per-seed trend is an anomaly (independent subprocesses shouldn't accumulate — likely machine load / GPU-memory fragmentation, flagged for investigation).
+- **Findings that stand (honest):**
+  - **The fail-3 config (cost_scale=1e7) is the healthiest to date** — G1/G2/G5/G6 all pass; the policy is genuinely learning a mixed, exploring, cost-responsive strategy.
+  - **G4 and G7 appear MIS-SPECIFIED, not un-passable by a healthy policy:**
+    - G4's "cost ≥ 1% of Δf1" is in fundamental tension with G1. The meaningful cost-health signal is **G5 (cost penalty shrinks over training), which passes** — the policy demonstrably responds to cost.
+    - G7's "cross-seed F1 std ≥ 0.02" penalizes a policy that legitimately *converges* across seeds (reproducibility is a virtue). Seed diversity, if wanted, is better measured on the action distribution than on a bounded, near-deterministic F1.
+  - **Lesson:** the operator-approved "combined fix, one run" traded pre-reg one-knob discipline for speed and produced a confounded, regressed result. Single-knob would have caught the W-43 collapse immediately.
+- **Action taken:** reverted W-43 (cost_scale → 1e7) and W-44's Stage-1 eval-window override (→ training window) to restore the fail-3 healthy config. Kept W-45 (6h budget) and the `--eval-window-size` flag (harmless, off by default). NOT relaunched — the next step is a gate-design decision (amend G4/G7 vs keep chasing), escalated to the operator.
+- **Status:** Stage 2 BLOCKED. The policy is healthy at cost_scale=1e7; the blocker is now two mis-specified gates, not the policy.

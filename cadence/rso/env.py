@@ -77,14 +77,15 @@ class SandboxConfig:
     # penalty so that a full retrain lands around 0.001-0.01 F1-points of
     # penalty, comparable to a real Δf1. Default 1e7 was empirically
     # verified in tests/unit/test_rso_audit.py.
-    # W-43 (R-Gate-A-stage1-fail-3, G4): raised 1e7 -> 1.5e8. At 1e7 the measured
-    # cost/|delta_f1| ratio was 0.0009-0.0022 across seeds, below gate G4's 1%
-    # bar — cost was responsive (G5 passed) but too small in magnitude. 1.5e8
-    # (15x) lifts the worst-run ratio above 0.01 with margin; the fewer-retrains
-    # action-mix shift amplifies the ratio further (delta_f1_avg drops as no-op
-    # share rises). Watch G1 (no-op collapse) and G6 (lambda) on the re-run — a
-    # cost weight this high trades toward no-op, which is exactly what G1/G6 cap.
-    cost_scale: float = 1.5e8
+    # W-43 REVERTED (R-Gate-A-stage1-fail-4): 1.5e8 collapsed the policy to no-op
+    # (G1 max-action 0.99, entropy 0.04) and paradoxically made G4 WORSE (no
+    # retrains -> cost_penalty_avg -> 0 -> ratio -> 0). Confirmed there is no
+    # cost_scale that satisfies both G4 (cost >= 1% of Delta-f1) and G1 (no
+    # collapse). Reverted to 1e7, the fail-3 value at which G1/G2/G5/G6 all pass
+    # and the policy is healthy and cost-responsive (G5). G4 is being reclassified
+    # as mis-specified; G5 is the meaningful cost-health signal. See
+    # docs/results.md R-Gate-A-stage1-fail-4.
+    cost_scale: float = 1e7
     # EWC controls the partial-retrain path so it matches Part 3B mechanics.
     # Zero disables (matches the pre-Step-A sandbox behaviour used by R-4).
     ewc_penalty: float = 1000.0

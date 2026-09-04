@@ -57,10 +57,13 @@ STAGE_PARAMS: dict[int, dict[str, Any]] = {
         "contested_only": True,
         # W-42: Stage-1 diagnostic is "No baselines" per pre-reg Part 1.
         "skip_baselines": True,
-        # W-44 (G7): larger eval windows -> continuous (non-quantized) F1 ->
-        # measurable cross-seed variance. Decoupled from the small training
-        # window so PPO training stays fast (G8).
-        "eval_window_size": 4096,
+        # W-44 REVERTED (fail-4): eval_window_size=4096 drove G8 to 10.06h and
+        # its intended G7 benefit was never fairly tested (W-43's policy collapse
+        # masked it in the same confounded run). Back to the training window
+        # (override off). The --eval-window-size flag remains available for a
+        # future *clean* G7 re-test at the healthy cost_scale=1e7 config, at a
+        # more modest size (e.g. 2048) so G8 stays within budget.
+        # "eval_window_size": 2048,  # <- re-enable for a clean G7 re-test
     },
     2: {
         "seeds": 10,
