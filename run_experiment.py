@@ -57,6 +57,10 @@ STAGE_PARAMS: dict[int, dict[str, Any]] = {
         "contested_only": True,
         # W-42: Stage-1 diagnostic is "No baselines" per pre-reg Part 1.
         "skip_baselines": True,
+        # W-44 (G7): larger eval windows -> continuous (non-quantized) F1 ->
+        # measurable cross-seed variance. Decoupled from the small training
+        # window so PPO training stays fast (G8).
+        "eval_window_size": 4096,
     },
     2: {
         "seeds": 10,
@@ -193,6 +197,8 @@ def _default_run_one_seed(
         cmd.append("--contested-only")
     if params.get("skip_baselines"):
         cmd.append("--skip-baselines")
+    if params.get("eval_window_size"):
+        cmd += ["--eval-window-size", str(params["eval_window_size"])]
 
     print(f"\n[stage {stage} seed {seed}] launching:")
     print(f"  {' '.join(cmd)}")

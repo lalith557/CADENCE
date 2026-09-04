@@ -95,6 +95,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--seeds", type=int, default=10)
     p.add_argument("--n-windows", type=int, default=15)
     p.add_argument("--window-size", type=int, default=2048)
+    p.add_argument(
+        "--eval-window-size",
+        type=int,
+        default=None,
+        help="W-44 (R-Gate-A-stage1-fail-3, G7): window size for the RSO EVAL "
+             "sandbox, decoupled from --window-size (which stays small so PPO "
+             "training is fast, protecting G8). Larger eval windows carry more "
+             "positives, so per-scenario F1 is continuous rather than quantized "
+             "(0.933=14/15, 0.833=5/6, ...) — restoring measurable cross-seed "
+             "variance for gate G7. Defaults to --window-size when unset.",
+    )
     p.add_argument("--sla", type=float, default=0.65)
     p.add_argument("--train-timesteps", type=int, default=30_000)
     p.add_argument("--w-gpu-hr", type=float, default=0.05)
@@ -327,8 +338,9 @@ def main(argv: list[str] | None = None) -> int:
             hardware=hardware,
             grid=grid,
         )
+        eval_window_size = args.eval_window_size or args.window_size
         eval_sandbox_cfg = SandboxConfig(
-            window_size=args.window_size,
+            window_size=eval_window_size,
             max_windows_per_episode=args.n_windows,
             finetune_epochs=5,
             fullretrain_epochs=15,

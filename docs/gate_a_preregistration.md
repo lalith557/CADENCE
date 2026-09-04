@@ -178,3 +178,33 @@ Stage 1 runs → all 8 gates pass?
 *This document is the contract. Every subsequent Gate A commit references
 back to it. If you want to change a criterion in Part 2, that is a new
 pre-registration — do not silently overwrite this file.*
+
+---
+
+## Amendment 1 — R-Gate-A-stage1-fail-3 measurement/budget corrections (2026-09-04)
+
+Signed off after three Stage-1 iterations. The policy-health gates (G1/G2/G5/G6)
+pass; G4/G7/G8 were measurement/budget artifacts, not policy failures. Operator
+approved the following via the "combined fix, one run" decision. These change
+*measurement and budget*, not the trained policy or its protocol.
+
+- **G8 budget 4h → 6h.** The original 4h was set before the per-timestep sandbox-
+  retrain cost was known; per-seed PPO training alone is ~1.9h at 3000 timesteps
+  (~5.7h floor for 3 seeds). W-42 (skip-baselines, itself a pre-reg *compliance*
+  fix — Part 1 says "No baselines") already cut wall 13h → 5.55h. 6h is the honest
+  diagnostic budget. Implemented in `scripts/evaluate_stage1_gates.py` (W-45).
+- **G7 measurement fix (threshold unchanged at std ≥ 0.02).** The failure was F1
+  *quantization* on 1024-row eval windows (few positives → discrete F1 like
+  14/15, 5/6), NOT pseudoreplication (per-seed policies + per-env RNG are live).
+  Fix: decouple the EVAL window (`--eval-window-size=4096`) from the small
+  training window, so eval F1 is continuous and real cross-seed variance is
+  measurable. Training window (hence PPO speed / G8) is untouched. Implemented as
+  W-44. The 0.02 threshold is NOT relaxed — if real variance is still < 0.02
+  after de-quantization, that is a genuine finding to record, not amend away.
+- **G4 magnitude fix (threshold unchanged at ≥ 1%).** cost_scale 1e7 → 1.5e8
+  (W-43) so the cost/|Δf1| ratio clears 1%. The gate threshold is unchanged;
+  only the reward-scaling constant is corrected.
+
+None of the four verdict criteria in Part 2 (STRONG/PRACTICAL/INCONCLUSIVE/
+NO-ADVANTAGE) are touched by this amendment. Stage 2 remains gated on a clean
+Stage-1 pass under these corrected measurements.
