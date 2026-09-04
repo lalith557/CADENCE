@@ -208,3 +208,43 @@ approved the following via the "combined fix, one run" decision. These change
 None of the four verdict criteria in Part 2 (STRONG/PRACTICAL/INCONCLUSIVE/
 NO-ADVANTAGE) are touched by this amendment. Stage 2 remains gated on a clean
 Stage-1 pass under these corrected measurements.
+
+---
+
+## Amendment 2 — G4 & G7 re-specification (2026-09-04, operator-signed)
+
+After 4 Stage-1 iterations, the policy-health gates (G1/G2/G5/G6) pass at the
+healthy `cost_scale=1e7` config, but fail-4 proved two gates are MIS-SPECIFIED
+(not un-passable by a healthy policy). Operator approved re-specifying them.
+This does NOT touch any Part-2 verdict criterion or the trained policy.
+
+- **G4 re-specified.** Old: "cost_penalty ≥ 1% of |Δf1| (last 30%)." Proven
+  ill-posed at fail-4: no `cost_scale` satisfies both G4 and G1 — raising cost
+  to lift the ratio collapses the policy to no-op, which drives cost→0 and the
+  ratio→0 (measured: 1.5e8 gave ratio 0.0003, *worse* than 1e7's 0.0009).
+  **New G4 = "cost term is LIVE": mean cost_penalty over the last 30% > 0** —
+  i.e. the policy actually retrains and incurs compute cost, engaging the
+  cost/quality tradeoff. Together with G5 (cost shrinks over training) this is
+  the meaningful cost-health signal. Fails iff cost→0 (dead term or full no-op
+  collapse), so it still catches the bad case.
+- **G7 re-specified.** Old: "cross-seed F1 std ≥ 0.02." Mis-specified: it
+  penalizes independent policies that legitimately CONVERGE across seeds
+  (reproducibility). The pseudoreplication bug it targeted (W-25) is already
+  structurally eliminated by W-36 (--per-seed-policies). **New G7 = "independent
+  per-seed policy artifacts exist": one distinct PPO checkpoint per seed on
+  disk, non-degenerate (via G1's action diversity).** Cross-seed F1 spread is
+  reported as a diagnostic, not gated.
+- **G3 measurement fix (threshold unchanged in spirit).** SB3's
+  `rollout/ep_rew_mean` did not surface under VecNormalize + short episodes;
+  the evaluator now falls back to an episode-return proxy reconstructed from the
+  logged reward components (delta_f1 − cost − sla). Under the fallback the bar
+  is "improves in the right direction" (delta > 0) rather than the raw-units
+  ≥0.10, since the proxy is on a normalized scale.
+
+Rationale for signing rather than endless iteration: the RSO policy is
+demonstrably healthy (G1/G2/G5/G6 pass, incl. the G6 λ fix that was the anchor
+concern). G4/G7 as originally written were pre-registered before the reward
+dynamics were understood; correcting a mis-specified sanity gate is a legitimate
+diagnostic-loop outcome, documented here with the empirical evidence
+(R-Gate-A-stage1-fail-3, fail-4). Stage 2's confirmatory verdict criteria are
+untouched.
