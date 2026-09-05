@@ -8,14 +8,14 @@
 
 ---
 
-## Master-prompt sections — DONE / PARTIAL / NOT-DONE
+## Protocol sections — DONE / PARTIAL / NOT-DONE
 
 Verified against actual code / results / artifacts, not commit messages.
 
 | § | Task | Status | Evidence |
 |---|---|---|---|
 | §0 | Honesty contract acknowledged | DONE | pre-reg part 3 anti-cheating clauses |
-| §1 | Role + prime directives | DONE | Master prompt frozen in-repo |
+| §1 | Role + prime directives | DONE | Protocol frozen in-repo |
 | §2 | Verify §2 audit leads with failing tests | DONE | `tests/unit/test_rso_audit.py` (7 tests green) |
 | §3 | Audit deliverable | DONE | `docs/gate_a_audit.md` (5 confirmed load-bearing bugs + roadmap) |
 | §4 | Resumable overnight pipeline | **DONE (this session)** | `run_experiment.py` + atomic ledger + `tests/unit/test_run_experiment.py` (3 green) |
@@ -50,7 +50,7 @@ Verified against actual code / results / artifacts, not commit messages.
 | Stage 1 (diagnostic) | 3 seeds × 3000 steps × 3 contested scenarios; 8 G-gates | **launched this session (background)** | `experiments/gate_a_ledger.json` |
 | Stage 2 (confirmatory) | 10 seeds × 30000 steps × 8 scenarios; frozen | **NOT_STARTED** — blocked by Stage 1 pass | ditto |
 
-## Product-launch gaps (§7 of `CADENCE-FINISH-AND-RUN.md`)
+## Product-launch gaps
 
 | Task | Status | Evidence / blocker |
 |---|---|---|

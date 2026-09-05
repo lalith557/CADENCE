@@ -1,4 +1,4 @@
-# CADENCE — Phase Plan (mirrors CADENCE-BUILD-PROMPT.md §7)
+# CADENCE — Phase Plan
 
 Following the reference's own priority order (§10B: build Claim C first, then A, then B narrowly).
 

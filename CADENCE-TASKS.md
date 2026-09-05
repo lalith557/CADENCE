@@ -14,7 +14,7 @@ This file has two views of the same work:
 
 Keep both updated together — ticking a task in one place doesn't auto-update the other, since this is a plain markdown file, not a linked tracker.
 
-> **Reconciliation note (2026-08-30):** statuses below were reconciled against the actual code, the 17 `R-` entries in `docs/results.md`, and the git history. **"Done" here means implemented and run at least once (smoke scale).** Several validation tasks are marked done at *small-n* (2–5 seeds) and still need ≥10-seed paper-grade re-runs before the paper — those carry an inline note. See `docs/weaknesses.md` (W-1..W-31) and `CADENCE-FINAL-COMPLETION-PROMPT.md` for the remaining work.
+> **Reconciliation note (2026-08-30):** statuses below were reconciled against the actual code, the 17 `R-` entries in `docs/results.md`, and the git history. **"Done" here means implemented and run at least once (smoke scale).** Several validation tasks are marked done at *small-n* (2–5 seeds) and still need ≥10-seed paper-grade re-runs before the paper — those carry an inline note. See `docs/weaknesses.md` (W-1..W-31) for the remaining work.
 
 ---
 

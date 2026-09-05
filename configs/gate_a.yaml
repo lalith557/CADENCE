@@ -7,16 +7,15 @@
 # the pre-registration wins. Do not overwrite the pre-reg to match this
 # file; edit this file to match the pre-reg.
 #
-# Fix status: the master-prompt §2 audit items are largely already landed
+# Fix status: the Stage-1 audit items are largely already landed
 # in commits W-32..W-37 (reward rescaled, `ent_coef=0.01`, VecNormalize,
 # prequential training reward, `--per-seed-policies`, per-env replay RNG).
 # Before touching any value below, reconcile against the current code and
 # the pre-reg — do not assume this template's numbers are the live ones.
 #
-# This is a starter template for the confirmatory Gate A run described in
-# CADENCE-GATE-A-MASTER-PROMPT.md §10 / §23 (Stage 2 confirmatory) / §24
-# (pre-registration). It is NOT plug-and-play. Before the frozen run, the
-# downstream Claude must:
+# This is a starter template for the confirmatory Gate A run (Stage 2
+# confirmatory / pre-registration). It is NOT plug-and-play. Before the
+# frozen run, the following must be done:
 #
 #   1. Extend `cadence/common/config.py`:
 #      - Add `"gate_a"` to the `Config.profile` Literal.
@@ -33,9 +32,9 @@
 #      `docs/gate_a_preregistration.md` (must be signed and dated before the
 #      final Gate-A run is executed). Any change after freeze invalidates the run.
 #
-# Values below embed the fixes flagged in the master prompt §2. Every number
+# Values below embed the fixes flagged in the Stage-1 audit. Every number
 # should be justified in decisions.md and, where uncertain, tuned in Stage-1
-# diagnostics (§23) before the confirmatory run.
+# diagnostics before the confirmatory run.
 
 profile: default          # switch to "gate_a" once the schema Literal is extended.
 
@@ -71,7 +70,7 @@ cdag:
 rso:
   top_k: 5
 
-  # --- Reward weights: RESCALED to fix master-prompt §2.1 ------------------
+  # --- Reward weights: RESCALED to fix Stage-1 audit §2.1 ------------------
   # Prior values (w_gpu_hr=0.05, w_kg_co2=0.5) made the cost penalty ~1e-5,
   # ~5 orders of magnitude below the F1/SLA terms, so the policy was blind
   # to compute cost. Placeholder starting scales below MUST be validated by
@@ -155,7 +154,7 @@ experiment:
 
   # --- Protocol (requires schema addition; ignored until wired) ------------
   protocol:
-    # Fix master-prompt §2.5 pseudoreplication: train an independent PPO per
+    # Fix Stage-1 audit §2.5 pseudoreplication: train an independent PPO per
     # seed instead of reusing a single seed=42 policy across all eval seeds.
     per_seed_policies: true
     seed_list: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]     # 10 independent training seeds
@@ -183,5 +182,5 @@ gate_a:
   preregistration_path: docs/gate_a_preregistration.md
   # If the pre-registration file is missing, unsigned, or its `frozen: true`
   # field is false, the run refuses to touch the test scenarios. The runner
-  # (§19 of the master prompt) enforces this before any test-set evaluation.
+  # (Stage-1 audit §19) enforces this before any test-set evaluation.
   refuse_test_eval_if_unfrozen: true
