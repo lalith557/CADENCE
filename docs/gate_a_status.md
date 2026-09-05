@@ -20,7 +20,7 @@ Verified against actual code / results / artifacts, not commit messages.
 | §3 | Audit deliverable | DONE | `docs/gate_a_audit.md` (5 confirmed load-bearing bugs + roadmap) |
 | §4 | Resumable overnight pipeline | **DONE (this session)** | `run_experiment.py` + atomic ledger + `tests/unit/test_run_experiment.py` (3 green) |
 | §5 | Legitimate efficiency wins | PARTIAL | `SubprocVecEnv` not attempted (§1.10 audit); OK for Stage 1 |
-| §6 | Repair PPO training (W-32..W-37 fixes) | DONE | commits `46a6e904`, `d71a022e`, `c0c4aea9`, `df6b3389`, `cfcf8608`, `8759b241` |
+| §6 | Repair PPO training (W-32..W-37 fixes) | DONE | commits `d6e7121c`, `20b8ecac`, `229b629e`, `52be880e`, `2d382be9`, `d553c497` |
 | §6 | Reward-decomposition instrumentation for gates G3/G4/G5 | **DONE (this session)** | commit `d3a3406`, `env.step` info dict |
 | §7 | Contested-SLA scenarios | DONE | `build_contested_sla_scenarios` in `benchmarks/synthetic_drift_gen` |
 | §8 | Data-leakage / TRAIN-VAL-TEST | PARTIAL | pre-reg §5 documents split; runner enforces contested-only for Stage 1 |
@@ -39,7 +39,7 @@ Verified against actual code / results / artifacts, not commit messages.
 | §21 | Experiment ledger | **DONE (this session)** | `experiments/gate_a_ledger.json` with proper status enum |
 | §22 | Reproducibility manifest | PARTIAL | git+config hash in ledger; environment lockfile pending |
 | §23 | Two-stage strategy (Stage 1 gate) | **STAGE 1 NOT RUN** | runner ready; launch this session |
-| §24 | Pre-register success | DONE | `docs/gate_a_preregistration.md` signed 2026-09-01, commit `cfcf860` |
+| §24 | Pre-register success | DONE | `docs/gate_a_preregistration.md` signed 2026-09-01, commit `2d382be9` (pre-rewrite `cfcf860`) |
 | §25 | Final deliverable (A–L) | PENDING Stage 2 | writes on Gate A completion |
 | §26 | Guardrails recap | ACTIVE | pre-reg Part 3 |
 

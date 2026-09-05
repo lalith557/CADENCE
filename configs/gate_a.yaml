@@ -1,7 +1,7 @@
 # CADENCE — Gate A frozen experiment config (STUB — defers to signed pre-reg)
 #
 # **Source of truth:** `docs/gate_a_preregistration.md` (signed 2026-09-01,
-# anchored to commit `cfcf860`). Its Stage-1 gates and Stage-2 verdict
+# anchored to commit `2d382be9`). Its Stage-1 gates and Stage-2 verdict
 # criteria are FROZEN. Where any value below appears to conflict with the
 # pre-reg (e.g. `dual.lambda_max`, per-seed policy protocol, `ent_coef`),
 # the pre-registration wins. Do not overwrite the pre-reg to match this

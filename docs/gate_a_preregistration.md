@@ -1,7 +1,15 @@
 # Gate A — Pre-registration (§23 Stage-1 gates + §24 Stage-2 criteria)
 
 **Signed off:** 2026-09-01, before any Stage-1 or Stage-2 run.
-**Anchoring commit:** `cfcf860` (all W-32..W-37 fixes landed).
+**Anchoring commit:** `2d382be9` (all W-32..W-37 fixes landed).
+
+> **Provenance note (2026-09-05):** the repository history was rewritten on
+> 2026-09-05 to remove auto-generated co-author trailers from commit messages.
+> This changed commit *hashes* but not file *trees* — every anchored state is
+> byte-identical to what was signed on 2026-09-01. The anchoring commit's hash
+> was `cfcf860` before the rewrite and `2d382be9` after; the Stage-1-pass
+> commit was `282fff3` before and `26938d3` after.
+
 **Prime directive:** these criteria are frozen. If a run doesn't meet the
 Stage-1 gates, we DO NOT proceed to Stage 2 — we diagnose. If Stage 2 lands
 between two verdicts, we pick the *worse* one (never the more flattering
